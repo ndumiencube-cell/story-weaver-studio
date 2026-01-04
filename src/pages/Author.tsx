@@ -144,7 +144,7 @@ const Author = () => {
                     </div>
 
                     <Textarea
-                      placeholder="Paste your isiZulu script here..."
+                      placeholder="Paste your script here (English or isiZulu)..."
                       value={scriptText}
                       onChange={(e) => setScriptText(e.target.value)}
                       className="min-h-[200px]"

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Play, Clock, Heart } from "lucide-react";
 import StarRating from "./StarRating";
 import { Link } from "react-router-dom";
+import { cn } from "@/lib/utils";
 
 export interface Book {
   id: string;
@@ -15,6 +16,7 @@ export interface Book {
   price: number;
   category: string;
   description?: string;
+  language: 'English' | 'isiZulu';
 }
 
 interface BookCardProps {
@@ -57,9 +59,22 @@ const BookCard = ({ book }: BookCardProps) => {
       </Link>
 
       <div className="p-4">
-        <Badge variant="secondary" className="mb-2 text-xs">
-          {book.category}
-        </Badge>
+        <div className="flex gap-2 mb-2">
+          <Badge variant="secondary" className="text-xs">
+            {book.category}
+          </Badge>
+          <Badge 
+            variant="outline" 
+            className={cn(
+              "text-xs",
+              book.language === "isiZulu" 
+                ? "border-primary/50 text-primary" 
+                : "border-accent/50 text-accent"
+            )}
+          >
+            {book.language}
+          </Badge>
+        </div>
         <h3 className="font-display text-lg font-semibold text-foreground line-clamp-1 mb-1">
           {book.title}
         </h3>

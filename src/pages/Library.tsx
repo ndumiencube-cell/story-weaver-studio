@@ -5,13 +5,14 @@ import { Input } from "@/components/ui/input";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import BookCard from "@/components/BookCard";
-import { sampleBooks, categories } from "@/data/books";
-import { Search, Filter, SlidersHorizontal } from "lucide-react";
+import { sampleBooks, categories, languages } from "@/data/books";
+import { Search, Filter, SlidersHorizontal, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const Library = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [selectedLanguage, setSelectedLanguage] = useState("All Languages");
   const [sortBy, setSortBy] = useState<"rating" | "price" | "duration">("rating");
 
   const filteredBooks = sampleBooks
@@ -21,7 +22,9 @@ const Library = () => {
         book.author.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory =
         selectedCategory === "All" || book.category === selectedCategory;
-      return matchesSearch && matchesCategory;
+      const matchesLanguage =
+        selectedLanguage === "All Languages" || book.language === selectedLanguage;
+      return matchesSearch && matchesCategory && matchesLanguage;
     })
     .sort((a, b) => {
       if (sortBy === "rating") return b.rating - a.rating;
@@ -41,7 +44,7 @@ const Library = () => {
               Audiobook Library
             </h1>
             <p className="text-muted-foreground text-lg">
-              Browse our collection of isiZulu audiobooks
+              Browse our collection of English and isiZulu audiobooks
             </p>
           </div>
 
@@ -75,7 +78,7 @@ const Library = () => {
           </div>
 
           {/* Categories */}
-          <div className="flex flex-wrap gap-2 mb-8">
+          <div className="flex flex-wrap gap-2 mb-4">
             {categories.map((category) => (
               <Badge
                 key={category}
@@ -89,6 +92,26 @@ const Library = () => {
                 onClick={() => setSelectedCategory(category)}
               >
                 {category}
+              </Badge>
+            ))}
+          </div>
+
+          {/* Language Filter */}
+          <div className="flex flex-wrap gap-2 mb-8">
+            <Globe className="w-5 h-5 text-muted-foreground mr-1" />
+            {languages.map((language) => (
+              <Badge
+                key={language}
+                variant={selectedLanguage === language ? "default" : "outline"}
+                className={cn(
+                  "cursor-pointer px-3 py-1 text-sm transition-all hover:scale-105",
+                  selectedLanguage === language
+                    ? "gradient-gold text-foreground border-0"
+                    : ""
+                )}
+                onClick={() => setSelectedLanguage(language)}
+              >
+                {language}
               </Badge>
             ))}
           </div>

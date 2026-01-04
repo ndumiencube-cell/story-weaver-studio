@@ -42,7 +42,7 @@ const Index = () => {
           <div className="max-w-2xl">
             <Badge className="mb-6 gradient-gold text-foreground border-0 animate-fade-in">
               <Sparkles className="w-3 h-3 mr-1" />
-              isiZulu Audiobooks
+              English & isiZulu Audiobooks
             </Badge>
 
             <h1
@@ -51,15 +51,15 @@ const Index = () => {
             >
               Izwi Lami,
               <br />
-              <span className="text-gradient">Indaba Yami</span>
+              <span className="text-gradient">My Voice</span>
             </h1>
 
             <p
               className="text-lg md:text-xl text-cream/80 mb-8 leading-relaxed animate-slide-up"
               style={{ animationDelay: "0.2s" }}
             >
-              Experience the rich tradition of African storytelling through
-              beautifully narrated isiZulu audiobooks. Listen to tales that have
+              Experience the rich tradition of storytelling through
+              beautifully narrated audiobooks in English and isiZulu. Listen to tales that have
               been passed down through generations, now available at your
               fingertips.
             </p>
@@ -122,7 +122,7 @@ const Index = () => {
               Why Choose IzwiLami?
             </h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              The ultimate platform for isiZulu audiobooks, connecting listeners
+              The ultimate platform for English and isiZulu audiobooks, connecting listeners
               with authentic African stories.
             </p>
           </div>
@@ -136,7 +136,7 @@ const Index = () => {
                 Vast Library
               </h3>
               <p className="text-muted-foreground">
-                Access hundreds of isiZulu audiobooks across multiple genres,
+                Access hundreds of audiobooks in English and isiZulu across multiple genres,
                 from folk tales to modern fiction.
               </p>
             </div>
@@ -149,8 +149,8 @@ const Index = () => {
                 AI Voice Generation
               </h3>
               <p className="text-muted-foreground">
-                Convert your written scripts to professional-quality isiZulu
-                audiobooks using our AI technology.
+                Convert your written scripts to professional-quality
+                audiobooks in English or isiZulu using our AI technology.
               </p>
             </div>
 
@@ -179,7 +179,7 @@ const Index = () => {
                 Featured Audiobooks
               </h2>
               <p className="text-muted-foreground">
-                Discover our most popular isiZulu stories
+                Discover our most popular stories in English and isiZulu
               </p>
             </div>
             <Button variant="outline" asChild className="hidden md:flex">
