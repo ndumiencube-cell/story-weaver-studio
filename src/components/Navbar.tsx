@@ -1,18 +1,39 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Headphones, PenTool, Menu, X } from "lucide-react";
+import { Headphones, PenTool, Menu, X, User, LogOut } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const Navbar = () => {
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
+  const { user, signOut } = useAuth();
 
   const navLinks = [
     { href: "/", label: "Home" },
     { href: "/library", label: "Library" },
     { href: "/author", label: "For Authors" },
   ];
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
+
+  const getUserInitials = () => {
+    if (user?.user_metadata?.display_name) {
+      return user.user_metadata.display_name.slice(0, 2).toUpperCase();
+    }
+    return user?.email?.slice(0, 2).toUpperCase() || "U";
+  };
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
@@ -46,20 +67,57 @@ const Navbar = () => {
             ))}
           </div>
 
-          {/* CTA Buttons */}
+          {/* CTA Buttons / User Menu */}
           <div className="hidden md:flex items-center gap-3">
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/library">
-                <Headphones className="w-4 h-4 mr-2" />
-                Listen
-              </Link>
-            </Button>
-            <Button variant="hero" size="sm" asChild>
-              <Link to="/author">
-                <PenTool className="w-4 h-4 mr-2" />
-                Create
-              </Link>
-            </Button>
+            {user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="gap-2">
+                    <Avatar className="w-7 h-7">
+                      <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                        {getUserInitials()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="hidden lg:inline">
+                      {user.user_metadata?.display_name || user.email?.split("@")[0]}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem asChild>
+                    <Link to="/library" className="cursor-pointer">
+                      <Headphones className="w-4 h-4 mr-2" />
+                      My Library
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/author" className="cursor-pointer">
+                      <PenTool className="w-4 h-4 mr-2" />
+                      Author Dashboard
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive">
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Sign Out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link to="/auth">
+                    <User className="w-4 h-4 mr-2" />
+                    Sign In
+                  </Link>
+                </Button>
+                <Button variant="hero" size="sm" asChild>
+                  <Link to="/auth">
+                    Get Started
+                  </Link>
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -95,18 +153,36 @@ const Navbar = () => {
                 </Link>
               ))}
               <div className="flex flex-col gap-2 pt-4">
-                <Button variant="outline" asChild>
-                  <Link to="/library" onClick={() => setIsOpen(false)}>
-                    <Headphones className="w-4 h-4 mr-2" />
-                    Start Listening
-                  </Link>
-                </Button>
-                <Button variant="hero" asChild>
-                  <Link to="/author" onClick={() => setIsOpen(false)}>
-                    <PenTool className="w-4 h-4 mr-2" />
-                    Become an Author
-                  </Link>
-                </Button>
+                {user ? (
+                  <>
+                    <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                      <Avatar className="w-6 h-6">
+                        <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                          {getUserInitials()}
+                        </AvatarFallback>
+                      </Avatar>
+                      {user.user_metadata?.display_name || user.email}
+                    </div>
+                    <Button variant="outline" onClick={() => { handleSignOut(); setIsOpen(false); }}>
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Sign Out
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button variant="outline" asChild>
+                      <Link to="/auth" onClick={() => setIsOpen(false)}>
+                        <User className="w-4 h-4 mr-2" />
+                        Sign In
+                      </Link>
+                    </Button>
+                    <Button variant="hero" asChild>
+                      <Link to="/auth" onClick={() => setIsOpen(false)}>
+                        Get Started
+                      </Link>
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </div>
