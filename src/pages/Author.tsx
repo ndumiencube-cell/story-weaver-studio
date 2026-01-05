@@ -47,7 +47,34 @@ const Author = () => {
   const [selectedVoice, setSelectedVoice] = useState<"male" | "female">("male");
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ["text/plain", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+    if (!validTypes.includes(file.type) && !file.name.endsWith(".txt") && !file.name.endsWith(".pdf") && !file.name.endsWith(".docx")) {
+      toast.error("Please upload a PDF, DOCX, or TXT file");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      if (file.type === "text/plain" || file.name.endsWith(".txt")) {
+        const text = await file.text();
+        setScriptText(text);
+        toast.success("Text file loaded successfully!");
+      } else {
+        toast.info("PDF/DOCX parsing will be available soon. For now, please paste text directly.");
+      }
+    } catch (error) {
+      console.error("File upload error:", error);
+      toast.error("Failed to read file");
+    } finally {
+      setIsUploading(false);
+    }
+  };
   const myBooks = sampleBooks.slice(0, 3);
 
   const handleGenerateCover = async () => {
@@ -228,16 +255,25 @@ const Author = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary transition-colors cursor-pointer">
+                    <label className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary transition-colors cursor-pointer block">
+                      <input
+                        type="file"
+                        accept=".txt,.pdf,.docx"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                        disabled={isUploading}
+                      />
                       <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                      <p className="font-medium mb-1">Drop your document here</p>
+                      <p className="font-medium mb-1">
+                        {isUploading ? "Uploading..." : "Drop your document here"}
+                      </p>
                       <p className="text-sm text-muted-foreground">
                         Supports PDF, DOCX, TXT
                       </p>
-                      <Button variant="outline" size="sm" className="mt-4">
-                        Browse Files
+                      <Button variant="outline" size="sm" className="mt-4" type="button" asChild>
+                        <span>Browse Files</span>
                       </Button>
-                    </div>
+                    </label>
 
                     <div className="relative">
                       <div className="absolute inset-0 flex items-center">
