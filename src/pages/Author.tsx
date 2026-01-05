@@ -23,15 +23,30 @@ import {
   Eye,
   Clock,
   CheckCircle2,
+  Play,
+  Pause,
+  Volume2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const Author = () => {
   const [scriptText, setScriptText] = useState("");
   const [coverPrompt, setCoverPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedCover, setGeneratedCover] = useState<string | null>(null);
+  const [isConverting, setIsConverting] = useState(false);
+  const [generatedAudio, setGeneratedAudio] = useState<string | null>(null);
+  const [selectedVoice, setSelectedVoice] = useState<"male" | "female">("male");
+  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const myBooks = sampleBooks.slice(0, 3);
 
@@ -73,12 +88,76 @@ const Author = () => {
     }
   };
 
-  const handleConvertToAudio = () => {
+  const handleConvertToAudio = async () => {
     if (!scriptText.trim()) {
       toast.error("Please enter or upload your script first");
       return;
     }
-    toast.success("Converting to audiobook... This may take a few minutes.");
+
+    if (scriptText.length > 5000) {
+      toast.error("Script is too long. Maximum 5000 characters for demo.");
+      return;
+    }
+
+    setIsConverting(true);
+    setGeneratedAudio(null);
+    
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/convert-to-audiobook`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ text: scriptText, voice: selectedVoice }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to convert to audiobook");
+      }
+
+      const audioUrl = `data:audio/mpeg;base64,${data.audioContent}`;
+      setGeneratedAudio(audioUrl);
+      
+      // Create audio element for playback control
+      const audio = new Audio(audioUrl);
+      audio.onended = () => setIsPlaying(false);
+      setAudioElement(audio);
+      
+      toast.success("Audiobook generated successfully!");
+    } catch (error) {
+      console.error("Audiobook conversion error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to convert to audiobook");
+    } finally {
+      setIsConverting(false);
+    }
+  };
+
+  const handlePlayPause = () => {
+    if (!audioElement) return;
+    
+    if (isPlaying) {
+      audioElement.pause();
+      setIsPlaying(false);
+    } else {
+      audioElement.play();
+      setIsPlaying(true);
+    }
+  };
+
+  const handleDownloadAudio = () => {
+    if (!generatedAudio) return;
+    
+    const link = document.createElement("a");
+    link.href = generatedAudio;
+    link.download = "audiobook.mp3";
+    link.click();
+    toast.success("Audiobook downloaded!");
   };
 
   const stats = [
@@ -178,14 +257,78 @@ const Author = () => {
                       className="min-h-[200px]"
                     />
 
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-medium">Voice:</label>
+                      <Select value={selectedVoice} onValueChange={(v) => setSelectedVoice(v as "male" | "female")}>
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="male">Male</SelectItem>
+                          <SelectItem value="female">Female</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <span className="text-xs text-muted-foreground ml-2">
+                        {scriptText.length}/5000 chars
+                      </span>
+                    </div>
+
                     <Button
                       variant="hero"
                       className="w-full"
                       onClick={handleConvertToAudio}
+                      disabled={isConverting}
                     >
-                      <Mic2 className="w-4 h-4 mr-2" />
-                      Convert to Audiobook
+                      {isConverting ? (
+                        <>
+                          <Clock className="w-4 h-4 mr-2 animate-spin" />
+                          Converting...
+                        </>
+                      ) : (
+                        <>
+                          <Mic2 className="w-4 h-4 mr-2" />
+                          Convert to Audiobook
+                        </>
+                      )}
                     </Button>
+
+                    {generatedAudio && (
+                      <div className="bg-secondary rounded-xl p-4 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Volume2 className="w-5 h-5 text-primary" />
+                          <span className="font-medium">Generated Audiobook</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handlePlayPause}
+                            className="flex-1"
+                          >
+                            {isPlaying ? (
+                              <>
+                                <Pause className="w-4 h-4 mr-2" />
+                                Pause
+                              </>
+                            ) : (
+                              <>
+                                <Play className="w-4 h-4 mr-2" />
+                                Play
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleDownloadAudio}
+                            className="flex-1"
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            Download
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
