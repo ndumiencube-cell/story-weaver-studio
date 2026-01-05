@@ -25,24 +25,52 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const Author = () => {
   const [scriptText, setScriptText] = useState("");
   const [coverPrompt, setCoverPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedCover, setGeneratedCover] = useState<string | null>(null);
 
   const myBooks = sampleBooks.slice(0, 3);
 
-  const handleGenerateCover = () => {
+  const handleGenerateCover = async () => {
     if (!coverPrompt.trim()) {
       toast.error("Please enter a description for your book cover");
       return;
     }
+    
     setIsGenerating(true);
-    setTimeout(() => {
-      setIsGenerating(false);
+    setGeneratedCover(null);
+    
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-cover`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ prompt: coverPrompt }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to generate cover");
+      }
+
+      setGeneratedCover(data.imageUrl);
       toast.success("Book cover generated successfully!");
-    }, 2000);
+    } catch (error) {
+      console.error("Cover generation error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to generate cover");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleConvertToAudio = () => {
@@ -170,13 +198,21 @@ const Author = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="aspect-[3/4] bg-muted rounded-xl flex items-center justify-center border-2 border-dashed border-border">
-                      <div className="text-center p-8">
-                        <Sparkles className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-                        <p className="text-muted-foreground">
-                          Your AI-generated cover will appear here
-                        </p>
-                      </div>
+                    <div className="aspect-[3/4] bg-muted rounded-xl flex items-center justify-center border-2 border-dashed border-border overflow-hidden">
+                      {generatedCover ? (
+                        <img 
+                          src={generatedCover} 
+                          alt="Generated book cover" 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-center p-8">
+                          <Sparkles className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                          <p className="text-muted-foreground">
+                            Your AI-generated cover will appear here
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     <Input
