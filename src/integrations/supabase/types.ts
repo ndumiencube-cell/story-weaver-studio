@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      audiobooks: {
+        Row: {
+          audio_content: string
+          author_name: string | null
+          cover_url: string | null
+          created_at: string
+          description: string | null
+          duration: number | null
+          id: string
+          title: string
+          updated_at: string
+          user_id: string
+          voice_id: string
+        }
+        Insert: {
+          audio_content: string
+          author_name?: string | null
+          cover_url?: string | null
+          created_at?: string
+          description?: string | null
+          duration?: number | null
+          id?: string
+          title: string
+          updated_at?: string
+          user_id: string
+          voice_id: string
+        }
+        Update: {
+          audio_content?: string
+          author_name?: string | null
+          cover_url?: string | null
+          created_at?: string
+          description?: string | null
+          duration?: number | null
+          id?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+          voice_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
