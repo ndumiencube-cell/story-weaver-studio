@@ -6,10 +6,20 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ElevenLabs voice IDs - using voices suitable for audiobooks/narration
+// ElevenLabs voice options - expanded selection for variety
 const VOICES = {
-  male: "JBFqnCBsd6RMkjVDRZzb", // George - warm, authoritative
-  female: "EXAVITQu4vr4xnSDxMaL", // Sarah - warm, engaging
+  // Male voices
+  george: { id: "JBFqnCBsd6RMkjVDRZzb", name: "George", gender: "male", description: "Warm, authoritative" },
+  brian: { id: "nPczCjzI2devNBz1zQrb", name: "Brian", gender: "male", description: "Deep, mature" },
+  daniel: { id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", gender: "male", description: "British, professional" },
+  liam: { id: "TX3LPaxmHKxFdv7VOQHJ", name: "Liam", gender: "male", description: "Young, friendly" },
+  charlie: { id: "IKne3meq5aSn9XLyUdCD", name: "Charlie", gender: "male", description: "Conversational" },
+  // Female voices
+  sarah: { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", gender: "female", description: "Warm, engaging" },
+  laura: { id: "FGY2WhTYpPnrIDTdsKH5", name: "Laura", gender: "female", description: "Soft, soothing" },
+  alice: { id: "Xb7hH8MSUJpSbSDYk0k2", name: "Alice", gender: "female", description: "British, elegant" },
+  jessica: { id: "cgSgspJ2msm6clMCkdW9", name: "Jessica", gender: "female", description: "Expressive, dynamic" },
+  lily: { id: "pFZP5JQG7iQjIQuC4Bku", name: "Lily", gender: "female", description: "Warm, narrative" },
 };
 
 serve(async (req) => {
@@ -18,7 +28,7 @@ serve(async (req) => {
   }
 
   try {
-    const { text, voice = "male" } = await req.json();
+    const { text, voice = "george" } = await req.json();
     const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
 
     if (!ELEVENLABS_API_KEY) {
@@ -39,9 +49,11 @@ serve(async (req) => {
       );
     }
 
-    const voiceId = VOICES[voice as keyof typeof VOICES] || VOICES.male;
+    // Get voice ID from voice name, fallback to george
+    const voiceConfig = VOICES[voice as keyof typeof VOICES] || VOICES.george;
+    const voiceId = voiceConfig.id;
 
-    console.log("Converting text to speech, length:", text.length, "voice:", voice);
+    console.log("Converting text to speech, length:", text.length, "voice:", voice, "voiceId:", voiceId);
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
@@ -85,6 +97,7 @@ serve(async (req) => {
       JSON.stringify({ 
         audioContent: base64Audio,
         duration: Math.ceil(text.length / 15), // Rough estimate: ~15 chars per second
+        voice: voiceConfig,
         message: "Audiobook generated successfully" 
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

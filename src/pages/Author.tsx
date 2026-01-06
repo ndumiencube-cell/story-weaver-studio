@@ -9,6 +9,9 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { sampleBooks } from "@/data/books";
 import StarRating from "@/components/StarRating";
+import AudioPlayer from "@/components/AudioPlayer";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Upload,
   Sparkles,
@@ -23,12 +26,9 @@ import {
   Eye,
   Clock,
   CheckCircle2,
-  Play,
-  Pause,
-  Volume2,
+  Save,
 } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import {
   Select,
   SelectContent,
@@ -37,17 +37,33 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+// Voice options matching the edge function
+const VOICE_OPTIONS = [
+  { id: "george", name: "George", gender: "Male", description: "Warm, authoritative" },
+  { id: "brian", name: "Brian", gender: "Male", description: "Deep, mature" },
+  { id: "daniel", name: "Daniel", gender: "Male", description: "British, professional" },
+  { id: "liam", name: "Liam", gender: "Male", description: "Young, friendly" },
+  { id: "charlie", name: "Charlie", gender: "Male", description: "Conversational" },
+  { id: "sarah", name: "Sarah", gender: "Female", description: "Warm, engaging" },
+  { id: "laura", name: "Laura", gender: "Female", description: "Soft, soothing" },
+  { id: "alice", name: "Alice", gender: "Female", description: "British, elegant" },
+  { id: "jessica", name: "Jessica", gender: "Female", description: "Expressive, dynamic" },
+  { id: "lily", name: "Lily", gender: "Female", description: "Warm, narrative" },
+];
+
 const Author = () => {
+  const { user } = useAuth();
   const [scriptText, setScriptText] = useState("");
+  const [bookTitle, setBookTitle] = useState("");
   const [coverPrompt, setCoverPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedCover, setGeneratedCover] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
   const [generatedAudio, setGeneratedAudio] = useState<string | null>(null);
-  const [selectedVoice, setSelectedVoice] = useState<"male" | "female">("male");
-  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState("george");
   const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [audioDuration, setAudioDuration] = useState<number | null>(null);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -150,11 +166,7 @@ const Author = () => {
 
       const audioUrl = `data:audio/mpeg;base64,${data.audioContent}`;
       setGeneratedAudio(audioUrl);
-      
-      // Create audio element for playback control
-      const audio = new Audio(audioUrl);
-      audio.onended = () => setIsPlaying(false);
-      setAudioElement(audio);
+      setAudioDuration(data.duration);
       
       toast.success("Audiobook generated successfully!");
     } catch (error) {
@@ -165,15 +177,68 @@ const Author = () => {
     }
   };
 
-  const handlePlayPause = () => {
-    if (!audioElement) return;
-    
-    if (isPlaying) {
-      audioElement.pause();
-      setIsPlaying(false);
-    } else {
-      audioElement.play();
-      setIsPlaying(true);
+  const handleSaveToLibrary = async () => {
+    if (!user) {
+      toast.error("Please sign in to save audiobooks to your library");
+      return;
+    }
+
+    if (!generatedAudio || !bookTitle.trim()) {
+      toast.error("Please generate an audiobook and add a title first");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      // Convert base64 to blob for storage
+      const base64Data = generatedAudio.split(",")[1];
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const audioBlob = new Blob([bytes], { type: "audio/mpeg" });
+
+      // Upload to storage
+      const fileName = `${user.id}/${Date.now()}-${bookTitle.replace(/\s+/g, "-").toLowerCase()}.mp3`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("audiobooks")
+        .upload(fileName, audioBlob);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from("audiobooks")
+        .getPublicUrl(fileName);
+
+      // Save audiobook metadata
+      const { error: insertError } = await supabase
+        .from("audiobooks")
+        .insert({
+          user_id: user.id,
+          title: bookTitle,
+          audio_url: urlData.publicUrl,
+          cover_url: generatedCover,
+          voice_id: selectedVoice,
+          duration: audioDuration,
+        });
+
+      if (insertError) throw insertError;
+
+      toast.success("Audiobook saved to your library!");
+      
+      // Reset form
+      setScriptText("");
+      setBookTitle("");
+      setGeneratedAudio(null);
+      setGeneratedCover(null);
+      setAudioDuration(null);
+    } catch (error) {
+      console.error("Save error:", error);
+      toast.error("Failed to save audiobook");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -182,7 +247,7 @@ const Author = () => {
     
     const link = document.createElement("a");
     link.href = generatedAudio;
-    link.download = "audiobook.mp3";
+    link.download = `${bookTitle || "audiobook"}.mp3`;
     link.click();
     toast.success("Audiobook downloaded!");
   };
@@ -275,36 +340,44 @@ const Author = () => {
                       </Button>
                     </label>
 
-                    <div className="relative">
-                      <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t" />
-                      </div>
-                      <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-card px-2 text-muted-foreground">
-                          Or paste your script
-                        </span>
-                      </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Book Title:</label>
+                      <Input
+                        placeholder="Enter your audiobook title..."
+                        value={bookTitle}
+                        onChange={(e) => setBookTitle(e.target.value)}
+                      />
                     </div>
 
                     <Textarea
                       placeholder="Paste your script here (English or isiZulu)..."
                       value={scriptText}
                       onChange={(e) => setScriptText(e.target.value)}
-                      className="min-h-[200px]"
+                      className="min-h-[150px]"
                     />
 
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm font-medium">Voice:</label>
-                      <Select value={selectedVoice} onValueChange={(v) => setSelectedVoice(v as "male" | "female")}>
-                        <SelectTrigger className="w-32">
-                          <SelectValue />
+                    <div className="flex flex-col gap-2">
+                      <label className="text-sm font-medium">Select Voice:</label>
+                      <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Choose a voice" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="male">Male</SelectItem>
-                          <SelectItem value="female">Female</SelectItem>
+                          <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Male Voices</div>
+                          {VOICE_OPTIONS.filter(v => v.gender === "Male").map((voice) => (
+                            <SelectItem key={voice.id} value={voice.id}>
+                              {voice.name} - {voice.description}
+                            </SelectItem>
+                          ))}
+                          <div className="px-2 py-1 text-xs font-semibold text-muted-foreground mt-2">Female Voices</div>
+                          {VOICE_OPTIONS.filter(v => v.gender === "Female").map((voice) => (
+                            <SelectItem key={voice.id} value={voice.id}>
+                              {voice.name} - {voice.description}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
-                      <span className="text-xs text-muted-foreground ml-2">
+                      <span className="text-xs text-muted-foreground">
                         {scriptText.length}/5000 chars
                       </span>
                     </div>
@@ -329,30 +402,10 @@ const Author = () => {
                     </Button>
 
                     {generatedAudio && (
-                      <div className="bg-secondary rounded-xl p-4 space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Volume2 className="w-5 h-5 text-primary" />
-                          <span className="font-medium">Generated Audiobook</span>
-                        </div>
+                      <div className="space-y-3">
+                        <AudioPlayer audioUrl={generatedAudio} title={bookTitle} compact />
+                        
                         <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handlePlayPause}
-                            className="flex-1"
-                          >
-                            {isPlaying ? (
-                              <>
-                                <Pause className="w-4 h-4 mr-2" />
-                                Pause
-                              </>
-                            ) : (
-                              <>
-                                <Play className="w-4 h-4 mr-2" />
-                                Play
-                              </>
-                            )}
-                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
@@ -362,7 +415,31 @@ const Author = () => {
                             <Download className="w-4 h-4 mr-2" />
                             Download
                           </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={handleSaveToLibrary}
+                            disabled={isSaving || !user}
+                            className="flex-1"
+                          >
+                            {isSaving ? (
+                              <>
+                                <Clock className="w-4 h-4 mr-2 animate-spin" />
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Save className="w-4 h-4 mr-2" />
+                                Save to Library
+                              </>
+                            )}
+                          </Button>
                         </div>
+                        {!user && (
+                          <p className="text-xs text-muted-foreground text-center">
+                            Sign in to save audiobooks to your library
+                          </p>
+                        )}
                       </div>
                     )}
                   </CardContent>

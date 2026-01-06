@@ -16,7 +16,7 @@ export type Database = {
     Tables: {
       audiobooks: {
         Row: {
-          audio_content: string
+          audio_url: string | null
           author_name: string | null
           cover_url: string | null
           created_at: string
@@ -29,7 +29,7 @@ export type Database = {
           voice_id: string
         }
         Insert: {
-          audio_content: string
+          audio_url?: string | null
           author_name?: string | null
           cover_url?: string | null
           created_at?: string
@@ -42,7 +42,7 @@ export type Database = {
           voice_id: string
         }
         Update: {
-          audio_content?: string
+          audio_url?: string | null
           author_name?: string | null
           cover_url?: string | null
           created_at?: string
