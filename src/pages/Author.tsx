@@ -55,6 +55,8 @@ const Author = () => {
   const { user } = useAuth();
   const [scriptText, setScriptText] = useState("");
   const [bookTitle, setBookTitle] = useState("");
+  const [authorName, setAuthorName] = useState("");
+  const [bookDescription, setBookDescription] = useState("");
   const [coverPrompt, setCoverPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedCover, setGeneratedCover] = useState<string | null>(null);
@@ -218,6 +220,8 @@ const Author = () => {
         .insert({
           user_id: user.id,
           title: bookTitle,
+          author_name: authorName || null,
+          description: bookDescription || null,
           audio_url: urlData.publicUrl,
           cover_url: generatedCover,
           voice_id: selectedVoice,
@@ -231,6 +235,8 @@ const Author = () => {
       // Reset form
       setScriptText("");
       setBookTitle("");
+      setAuthorName("");
+      setBookDescription("");
       setGeneratedAudio(null);
       setGeneratedCover(null);
       setAudioDuration(null);
@@ -346,6 +352,25 @@ const Author = () => {
                         placeholder="Enter your audiobook title..."
                         value={bookTitle}
                         onChange={(e) => setBookTitle(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Author Name:</label>
+                      <Input
+                        placeholder="Your name or pen name..."
+                        value={authorName}
+                        onChange={(e) => setAuthorName(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Description (optional):</label>
+                      <Textarea
+                        placeholder="Brief description of your audiobook..."
+                        value={bookDescription}
+                        onChange={(e) => setBookDescription(e.target.value)}
+                        className="min-h-[80px]"
                       />
                     </div>
 

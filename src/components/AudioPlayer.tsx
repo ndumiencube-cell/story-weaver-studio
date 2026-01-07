@@ -1,26 +1,38 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Gauge, Trash2 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface AudioPlayerProps {
   audioUrl: string;
   title?: string;
   author?: string;
   coverUrl?: string;
+  description?: string;
   className?: string;
   compact?: boolean;
+  onDelete?: () => void;
 }
+
+const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 const AudioPlayer = ({ 
   audioUrl, 
   title, 
   author, 
-  coverUrl, 
+  coverUrl,
+  description, 
   className,
-  compact = false 
+  compact = false,
+  onDelete,
 }: AudioPlayerProps) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -28,6 +40,7 @@ const AudioPlayer = ({
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -101,6 +114,13 @@ const AudioPlayer = ({
     audio.currentTime = Math.min(duration, audio.currentTime + 10);
   };
 
+  const handleSpeedChange = (speed: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.playbackRate = speed;
+    setPlaybackSpeed(speed);
+  };
+
   const formatTime = (time: number) => {
     if (isNaN(time)) return "0:00";
     const minutes = Math.floor(time / 60);
@@ -131,6 +151,26 @@ const AudioPlayer = ({
           </div>
           <Progress value={progressPercent} className="h-1.5" />
         </div>
+
+        {/* Speed control for compact */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="text-xs px-2">
+              {playbackSpeed}x
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            {PLAYBACK_SPEEDS.map((speed) => (
+              <DropdownMenuItem
+                key={speed}
+                onClick={() => handleSpeedChange(speed)}
+                className={cn(playbackSpeed === speed && "bg-accent")}
+              >
+                {speed}x
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     );
   }
@@ -149,12 +189,25 @@ const AudioPlayer = ({
         )}
         
         <div className="flex-1 space-y-4">
-          {(title || author) && (
+          <div className="flex items-start justify-between">
             <div>
               {title && <h3 className="font-display text-lg font-semibold">{title}</h3>}
               {author && <p className="text-sm text-muted-foreground">{author}</p>}
+              {description && (
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{description}</p>
+              )}
             </div>
-          )}
+            {onDelete && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onDelete}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
 
           {/* Progress bar */}
           <div className="space-y-2">
@@ -190,6 +243,27 @@ const AudioPlayer = ({
               <Button variant="ghost" size="icon" onClick={skipForward}>
                 <SkipForward className="h-4 w-4" />
               </Button>
+
+              {/* Speed control */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="ml-2 gap-1">
+                    <Gauge className="h-4 w-4" />
+                    {playbackSpeed}x
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  {PLAYBACK_SPEEDS.map((speed) => (
+                    <DropdownMenuItem
+                      key={speed}
+                      onClick={() => handleSpeedChange(speed)}
+                      className={cn(playbackSpeed === speed && "bg-accent")}
+                    >
+                      {speed}x
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
             {/* Volume control */}
