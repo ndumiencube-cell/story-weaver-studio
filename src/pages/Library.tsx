@@ -13,6 +13,7 @@ import { Search, Filter, SlidersHorizontal, Globe, Library as LibraryIcon, BookO
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface Audiobook {
   id: string;
@@ -22,6 +23,7 @@ interface Audiobook {
   audio_url: string | null;
   voice_id: string;
   duration: number | null;
+  description: string | null;
   created_at: string;
 }
 
@@ -57,6 +59,35 @@ const Library = () => {
       console.error("Error fetching audiobooks:", error);
     } finally {
       setIsLoadingAudiobooks(false);
+    }
+  };
+
+  const handleDeleteAudiobook = async (audiobook: Audiobook) => {
+    if (!user) return;
+    
+    try {
+      // Delete from storage if there's an audio file
+      if (audiobook.audio_url) {
+        const path = audiobook.audio_url.split("/audiobooks/")[1];
+        if (path) {
+          await supabase.storage.from("audiobooks").remove([path]);
+        }
+      }
+
+      // Delete from database
+      const { error } = await supabase
+        .from("audiobooks")
+        .delete()
+        .eq("id", audiobook.id)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      setMyAudiobooks((prev) => prev.filter((a) => a.id !== audiobook.id));
+      toast.success("Audiobook deleted successfully");
+    } catch (error) {
+      console.error("Error deleting audiobook:", error);
+      toast.error("Failed to delete audiobook");
     }
   };
 
@@ -248,6 +279,8 @@ const Library = () => {
                           title={audiobook.title}
                           author={audiobook.author_name || "You"}
                           coverUrl={audiobook.cover_url || undefined}
+                          description={audiobook.description || undefined}
+                          onDelete={() => handleDeleteAudiobook(audiobook)}
                         />
                       </CardContent>
                     </Card>
