@@ -71,24 +71,49 @@ const Author = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const validTypes = ["text/plain", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
-    if (!validTypes.includes(file.type) && !file.name.endsWith(".txt") && !file.name.endsWith(".pdf") && !file.name.endsWith(".docx")) {
+    const validExtensions = [".txt", ".pdf", ".docx"];
+    const fileExtension = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+    
+    if (!validExtensions.includes(fileExtension)) {
       toast.error("Please upload a PDF, DOCX, or TXT file");
       return;
     }
 
     setIsUploading(true);
     try {
-      if (file.type === "text/plain" || file.name.endsWith(".txt")) {
+      if (fileExtension === ".txt") {
+        // Handle TXT files locally
         const text = await file.text();
         setScriptText(text);
         toast.success("Text file loaded successfully!");
       } else {
-        toast.info("PDF/DOCX parsing will be available soon. For now, please paste text directly.");
+        // Use edge function for PDF/DOCX parsing
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-document`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: formData,
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to parse document");
+        }
+
+        setScriptText(data.text);
+        toast.success(`Extracted ${data.charCount.toLocaleString()} characters from ${file.name}`);
       }
     } catch (error) {
       console.error("File upload error:", error);
-      toast.error("Failed to read file");
+      toast.error(error instanceof Error ? error.message : "Failed to read file");
     } finally {
       setIsUploading(false);
     }
