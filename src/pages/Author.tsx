@@ -51,6 +51,12 @@ const VOICE_OPTIONS = [
   { id: "lily", name: "Lily", gender: "Female", description: "Warm, narrative" },
 ];
 
+interface UploadedFile {
+  name: string;
+  text: string;
+  charCount: number;
+}
+
 const Author = () => {
   const { user } = useAuth();
   const [scriptText, setScriptText] = useState("");
@@ -66,57 +72,91 @@ const Author = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     const validExtensions = [".txt", ".pdf", ".docx"];
-    const fileExtension = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+    const fileArray = Array.from(files);
     
-    if (!validExtensions.includes(fileExtension)) {
-      toast.error("Please upload a PDF, DOCX, or TXT file");
-      return;
+    // Validate all files
+    for (const file of fileArray) {
+      const fileExtension = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+      if (!validExtensions.includes(fileExtension)) {
+        toast.error(`Invalid file type: ${file.name}. Please upload PDF, DOCX, or TXT files only.`);
+        return;
+      }
     }
 
     setIsUploading(true);
+    const newFiles: UploadedFile[] = [];
+
     try {
-      if (fileExtension === ".txt") {
-        // Handle TXT files locally
-        const text = await file.text();
-        setScriptText(text);
-        toast.success("Text file loaded successfully!");
-      } else {
-        // Use edge function for PDF/DOCX parsing
-        const formData = new FormData();
-        formData.append("file", file);
+      for (const file of fileArray) {
+        const fileExtension = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+        
+        if (fileExtension === ".txt") {
+          const text = await file.text();
+          newFiles.push({ name: file.name, text, charCount: text.length });
+        } else {
+          const formData = new FormData();
+          formData.append("file", file);
 
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-document`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            },
-            body: formData,
+          const response = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-document`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              },
+              body: formData,
+            }
+          );
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.error || `Failed to parse ${file.name}`);
           }
-        );
 
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || "Failed to parse document");
+          newFiles.push({ name: file.name, text: data.text, charCount: data.charCount });
         }
-
-        setScriptText(data.text);
-        toast.success(`Extracted ${data.charCount.toLocaleString()} characters from ${file.name}`);
       }
+
+      // Add to existing files
+      const allFiles = [...uploadedFiles, ...newFiles];
+      setUploadedFiles(allFiles);
+      
+      // Combine all text
+      const combinedText = allFiles.map(f => f.text).join("\n\n--- Chapter ---\n\n");
+      setScriptText(combinedText);
+      
+      const totalChars = allFiles.reduce((sum, f) => sum + f.charCount, 0);
+      toast.success(`Added ${newFiles.length} file(s). Total: ${totalChars.toLocaleString()} characters from ${allFiles.length} document(s)`);
     } catch (error) {
       console.error("File upload error:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to read file");
+      toast.error(error instanceof Error ? error.message : "Failed to read files");
     } finally {
       setIsUploading(false);
+      // Reset input to allow re-uploading same files
+      e.target.value = "";
     }
+  };
+
+  const handleRemoveFile = (index: number) => {
+    const newFiles = uploadedFiles.filter((_, i) => i !== index);
+    setUploadedFiles(newFiles);
+    const combinedText = newFiles.map(f => f.text).join("\n\n--- Chapter ---\n\n");
+    setScriptText(combinedText);
+    toast.success("File removed");
+  };
+
+  const handleClearAllFiles = () => {
+    setUploadedFiles([]);
+    setScriptText("");
+    toast.success("All files cleared");
   };
   const myBooks = sampleBooks.slice(0, 3);
 
@@ -265,6 +305,7 @@ const Author = () => {
       setGeneratedAudio(null);
       setGeneratedCover(null);
       setAudioDuration(null);
+      setUploadedFiles([]);
     } catch (error) {
       console.error("Save error:", error);
       toast.error("Failed to save audiobook");
@@ -358,18 +399,44 @@ const Author = () => {
                         onChange={handleFileUpload}
                         className="hidden"
                         disabled={isUploading}
+                        multiple
                       />
                       <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
                       <p className="font-medium mb-1">
-                        {isUploading ? "Uploading..." : "Drop your document here"}
+                        {isUploading ? "Processing files..." : "Drop your documents here"}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Supports PDF, DOCX, TXT
+                        Supports PDF, DOCX, TXT • Select multiple files
                       </p>
                       <Button variant="outline" size="sm" className="mt-4" type="button" asChild>
                         <span>Browse Files</span>
                       </Button>
                     </label>
+
+                    {uploadedFiles.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">Uploaded Files ({uploadedFiles.length})</span>
+                          <Button variant="ghost" size="sm" onClick={handleClearAllFiles}>
+                            Clear All
+                          </Button>
+                        </div>
+                        <div className="space-y-1">
+                          {uploadedFiles.map((file, index) => (
+                            <div key={index} className="flex items-center justify-between bg-muted/50 rounded-lg px-3 py-2 text-sm">
+                              <div className="flex items-center gap-2 truncate">
+                                <FileText className="w-4 h-4 text-primary shrink-0" />
+                                <span className="truncate">{file.name}</span>
+                                <span className="text-muted-foreground shrink-0">({file.charCount.toLocaleString()} chars)</span>
+                              </div>
+                              <Button variant="ghost" size="sm" onClick={() => handleRemoveFile(index)} className="h-6 w-6 p-0">
+                                ×
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Book Title:</label>
