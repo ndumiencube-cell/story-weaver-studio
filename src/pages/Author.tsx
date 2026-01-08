@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { sampleBooks } from "@/data/books";
 import StarRating from "@/components/StarRating";
 import AudioPlayer from "@/components/AudioPlayer";
 import { useAuth } from "@/hooks/useAuth";
@@ -158,7 +157,93 @@ const Author = () => {
     setScriptText("");
     toast.success("All files cleared");
   };
-  const myBooks = sampleBooks.slice(0, 3);
+
+  interface MyAudiobook {
+    id: string;
+    title: string;
+    author_name: string | null;
+    cover_url: string | null;
+    audio_url: string | null;
+    voice_id: string;
+    duration: number | null;
+    description: string | null;
+    is_published: boolean;
+    created_at: string;
+  }
+
+  const [myAudiobooks, setMyAudiobooks] = useState<MyAudiobook[]>([]);
+  const [isLoadingBooks, setIsLoadingBooks] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      fetchMyAudiobooks();
+    }
+  }, [user]);
+
+  const fetchMyAudiobooks = async () => {
+    if (!user) return;
+    setIsLoadingBooks(true);
+    try {
+      const { data, error } = await supabase
+        .from("audiobooks")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setMyAudiobooks(data || []);
+    } catch (error) {
+      console.error("Error fetching audiobooks:", error);
+    } finally {
+      setIsLoadingBooks(false);
+    }
+  };
+
+  const handlePublishToggle = async (audiobook: MyAudiobook) => {
+    try {
+      const { error } = await supabase
+        .from("audiobooks")
+        .update({ is_published: !audiobook.is_published })
+        .eq("id", audiobook.id)
+        .eq("user_id", user?.id);
+
+      if (error) throw error;
+
+      setMyAudiobooks((prev) =>
+        prev.map((a) =>
+          a.id === audiobook.id ? { ...a, is_published: !a.is_published } : a
+        )
+      );
+      toast.success(audiobook.is_published ? "Audiobook unpublished" : "Audiobook published!");
+    } catch (error) {
+      console.error("Error toggling publish:", error);
+      toast.error("Failed to update publish status");
+    }
+  };
+
+  const handleDeleteAudiobook = async (audiobook: MyAudiobook) => {
+    if (!user) return;
+    try {
+      if (audiobook.audio_url) {
+        const path = audiobook.audio_url.split("/audiobooks/")[1];
+        if (path) {
+          await supabase.storage.from("audiobooks").remove([path]);
+        }
+      }
+      const { error } = await supabase
+        .from("audiobooks")
+        .delete()
+        .eq("id", audiobook.id)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+      setMyAudiobooks((prev) => prev.filter((a) => a.id !== audiobook.id));
+      toast.success("Audiobook deleted");
+    } catch (error) {
+      console.error("Error deleting audiobook:", error);
+      toast.error("Failed to delete audiobook");
+    }
+  };
 
   const handleGenerateCover = async () => {
     if (!coverPrompt.trim()) {
@@ -619,60 +704,99 @@ const Author = () => {
 
             {/* My Books Tab */}
             <TabsContent value="books">
-              <div className="space-y-4">
-                {myBooks.map((book) => (
-                  <Card key={book.id} className="shadow-card">
-                    <CardContent className="p-6">
-                      <div className="flex gap-6">
-                        <img
-                          src={book.coverUrl}
-                          alt={book.title}
-                          className="w-24 h-32 object-cover rounded-lg"
-                        />
-                        <div className="flex-1">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <h3 className="font-display text-xl font-semibold">
-                                {book.title}
-                              </h3>
-                              <p className="text-muted-foreground">{book.category}</p>
+              {isLoadingBooks ? (
+                <div className="text-center py-16">
+                  <p className="text-muted-foreground">Loading your audiobooks...</p>
+                </div>
+              ) : myAudiobooks.length === 0 ? (
+                <div className="text-center py-16">
+                  <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="font-display text-xl font-semibold mb-2">No audiobooks yet</h3>
+                  <p className="text-muted-foreground">Create your first audiobook in the Create tab</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {myAudiobooks.map((book) => (
+                    <Card key={book.id} className="shadow-card">
+                      <CardContent className="p-6">
+                        <div className="flex gap-6">
+                          {book.cover_url ? (
+                            <img
+                              src={book.cover_url}
+                              alt={book.title}
+                              className="w-24 h-32 object-cover rounded-lg"
+                            />
+                          ) : (
+                            <div className="w-24 h-32 bg-muted rounded-lg flex items-center justify-center">
+                              <Mic2 className="w-8 h-8 text-muted-foreground" />
                             </div>
-                            <Badge
-                              variant="secondary"
-                              className="bg-green-100 text-green-700"
-                            >
-                              <CheckCircle2 className="w-3 h-3 mr-1" />
-                              Published
-                            </Badge>
-                          </div>
+                          )}
+                          <div className="flex-1">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <h3 className="font-display text-xl font-semibold">
+                                  {book.title}
+                                </h3>
+                                <p className="text-muted-foreground">
+                                  {book.author_name || "Unknown Author"}
+                                </p>
+                              </div>
+                              <Badge
+                                variant="secondary"
+                                className={book.is_published 
+                                  ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" 
+                                  : "bg-muted text-muted-foreground"}
+                              >
+                                {book.is_published ? (
+                                  <>
+                                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                                    Published
+                                  </>
+                                ) : (
+                                  "Draft"
+                                )}
+                              </Badge>
+                            </div>
 
-                          <div className="flex items-center gap-6 mt-4">
-                            <div className="flex items-center gap-2">
-                              <Eye className="w-4 h-4 text-muted-foreground" />
-                              <span className="text-sm">1,234 plays</span>
-                            </div>
-                            <StarRating rating={book.rating} size="sm" showValue />
-                            <div className="flex items-center gap-2">
-                              <DollarSign className="w-4 h-4 text-muted-foreground" />
-                              <span className="text-sm">R{book.price}</span>
-                            </div>
-                          </div>
+                            {book.description && (
+                              <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
+                                {book.description}
+                              </p>
+                            )}
 
-                          <div className="flex gap-2 mt-4">
-                            <Button variant="outline" size="sm">
-                              Edit
-                            </Button>
-                            <Button variant="outline" size="sm">
-                              <Download className="w-4 h-4 mr-1" />
-                              Analytics
-                            </Button>
+                            <div className="flex items-center gap-6 mt-4">
+                              <div className="flex items-center gap-2">
+                                <Clock className="w-4 h-4 text-muted-foreground" />
+                                <span className="text-sm">
+                                  {book.duration ? `${Math.round(book.duration / 60)} min` : "N/A"}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2 mt-4">
+                              <Button
+                                variant={book.is_published ? "outline" : "hero"}
+                                size="sm"
+                                onClick={() => handlePublishToggle(book)}
+                              >
+                                {book.is_published ? "Unpublish" : "Publish"}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteAudiobook(book)}
+                                className="text-destructive hover:text-destructive"
+                              >
+                                Delete
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </TabsContent>
 
             {/* Earnings Tab */}
