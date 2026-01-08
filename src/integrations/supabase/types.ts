@@ -23,6 +23,7 @@ export type Database = {
           description: string | null
           duration: number | null
           id: string
+          is_published: boolean
           title: string
           updated_at: string
           user_id: string
@@ -36,6 +37,7 @@ export type Database = {
           description?: string | null
           duration?: number | null
           id?: string
+          is_published?: boolean
           title: string
           updated_at?: string
           user_id: string
@@ -49,6 +51,7 @@ export type Database = {
           description?: string | null
           duration?: number | null
           id?: string
+          is_published?: boolean
           title?: string
           updated_at?: string
           user_id?: string

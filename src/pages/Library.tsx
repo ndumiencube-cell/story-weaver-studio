@@ -9,7 +9,7 @@ import Footer from "@/components/Footer";
 import BookCard from "@/components/BookCard";
 import AudioPlayer from "@/components/AudioPlayer";
 import { sampleBooks, categories, languages } from "@/data/books";
-import { Search, Filter, SlidersHorizontal, Globe, Library as LibraryIcon, BookOpen } from "lucide-react";
+import { Search, Filter, SlidersHorizontal, Globe, Library as LibraryIcon, BookOpen, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,6 +24,7 @@ interface Audiobook {
   voice_id: string;
   duration: number | null;
   description: string | null;
+  is_published: boolean;
   created_at: string;
 }
 
@@ -88,6 +89,29 @@ const Library = () => {
     } catch (error) {
       console.error("Error deleting audiobook:", error);
       toast.error("Failed to delete audiobook");
+    }
+  };
+
+  const handlePublishToggle = async (audiobook: Audiobook) => {
+    if (!user) return;
+    try {
+      const { error } = await supabase
+        .from("audiobooks")
+        .update({ is_published: !audiobook.is_published })
+        .eq("id", audiobook.id)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      setMyAudiobooks((prev) =>
+        prev.map((a) =>
+          a.id === audiobook.id ? { ...a, is_published: !a.is_published } : a
+        )
+      );
+      toast.success(audiobook.is_published ? "Audiobook unpublished" : "Audiobook published!");
+    } catch (error) {
+      console.error("Error toggling publish:", error);
+      toast.error("Failed to update publish status");
     }
   };
 
@@ -274,14 +298,30 @@ const Library = () => {
                   {myAudiobooks.map((audiobook) => (
                     <Card key={audiobook.id} className="overflow-hidden">
                       <CardContent className="p-0">
-                        <AudioPlayer
-                          audioUrl={audiobook.audio_url || ""}
-                          title={audiobook.title}
-                          author={audiobook.author_name || "You"}
-                          coverUrl={audiobook.cover_url || undefined}
-                          description={audiobook.description || undefined}
-                          onDelete={() => handleDeleteAudiobook(audiobook)}
-                        />
+                        <div className="flex flex-col">
+                          <AudioPlayer
+                            audioUrl={audiobook.audio_url || ""}
+                            title={audiobook.title}
+                            author={audiobook.author_name || "You"}
+                            coverUrl={audiobook.cover_url || undefined}
+                            description={audiobook.description || undefined}
+                            onDelete={() => handleDeleteAudiobook(audiobook)}
+                          />
+                          <div className="px-4 pb-4 flex items-center gap-2">
+                            <Button
+                              variant={audiobook.is_published ? "outline" : "default"}
+                              size="sm"
+                              onClick={() => handlePublishToggle(audiobook)}
+                              className="flex items-center gap-2"
+                            >
+                              <Send className="w-4 h-4" />
+                              {audiobook.is_published ? "Unpublish" : "Publish"}
+                            </Button>
+                            {audiobook.is_published && (
+                              <span className="text-xs text-green-600 font-medium">Published</span>
+                            )}
+                          </div>
+                        </div>
                       </CardContent>
                     </Card>
                   ))}
