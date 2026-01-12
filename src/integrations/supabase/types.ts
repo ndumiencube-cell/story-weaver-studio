@@ -24,6 +24,7 @@ export type Database = {
           duration: number | null
           id: string
           is_published: boolean
+          play_count: number
           title: string
           updated_at: string
           user_id: string
@@ -38,6 +39,7 @@ export type Database = {
           duration?: number | null
           id?: string
           is_published?: boolean
+          play_count?: number
           title: string
           updated_at?: string
           user_id: string
@@ -52,6 +54,7 @@ export type Database = {
           duration?: number | null
           id?: string
           is_published?: boolean
+          play_count?: number
           title?: string
           updated_at?: string
           user_id?: string
@@ -120,7 +123,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      increment_play_count: {
+        Args: { audiobook_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

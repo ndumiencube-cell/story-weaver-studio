@@ -9,7 +9,7 @@ import Footer from "@/components/Footer";
 import BookCard from "@/components/BookCard";
 import AudioPlayer from "@/components/AudioPlayer";
 import { sampleBooks, categories, languages } from "@/data/books";
-import { Search, Filter, SlidersHorizontal, Globe, Library as LibraryIcon, BookOpen, Send, Sparkles, Play, Clock } from "lucide-react";
+import { Search, Filter, SlidersHorizontal, Globe, Library as LibraryIcon, BookOpen, Send, Sparkles, Play, Clock, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,6 +26,7 @@ interface Audiobook {
   description: string | null;
   is_published: boolean;
   created_at: string;
+  play_count: number;
 }
 
 const Library = () => {
@@ -74,6 +75,26 @@ const Library = () => {
       return `${hrs}h ${mins % 60}m`;
     }
     return `${mins}m`;
+  };
+
+  const handlePlayAudiobook = async (audiobook: Audiobook) => {
+    setSelectedAudiobook(audiobook);
+    // Increment play count
+    try {
+      await supabase.rpc("increment_play_count", { audiobook_id: audiobook.id });
+      // Update local state
+      setPublishedAudiobooks(prev => 
+        prev.map(a => a.id === audiobook.id ? { ...a, play_count: a.play_count + 1 } : a)
+      );
+    } catch (error) {
+      console.error("Error incrementing play count:", error);
+    }
+  };
+
+  const formatPlayCount = (count: number) => {
+    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
+    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
+    return count.toString();
   };
 
   const fetchMyAudiobooks = async () => {
@@ -268,7 +289,7 @@ const Library = () => {
                           "group cursor-pointer transition-all duration-300 hover:shadow-glow overflow-hidden",
                           selectedAudiobook?.id === audiobook.id && "ring-2 ring-primary"
                         )}
-                        onClick={() => setSelectedAudiobook(audiobook)}
+                        onClick={() => handlePlayAudiobook(audiobook)}
                         style={{ animationDelay: `${index * 0.05}s` }}
                       >
                         <div className="relative aspect-[3/4] overflow-hidden">
@@ -284,6 +305,14 @@ const Library = () => {
                             </div>
                           )}
                           <div className="absolute inset-0 bg-gradient-to-t from-foreground/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                          
+                          {/* Play count badge */}
+                          {audiobook.play_count > 0 && (
+                            <Badge className="absolute top-3 left-3 bg-background/80 backdrop-blur-sm text-foreground border-0 text-xs">
+                              <Headphones className="w-3 h-3 mr-1" />
+                              {formatPlayCount(audiobook.play_count)}
+                            </Badge>
+                          )}
                           
                           {/* Play button overlay */}
                           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
@@ -304,9 +333,15 @@ const Library = () => {
                           <p className="text-sm text-muted-foreground mb-2 line-clamp-1">
                             {audiobook.author_name || "Unknown Author"}
                           </p>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Clock className="w-3 h-3" />
-                            {formatDuration(audiobook.duration)}
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {formatDuration(audiobook.duration)}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Headphones className="w-3 h-3" />
+                              {formatPlayCount(audiobook.play_count)} plays
+                            </div>
                           </div>
                         </div>
                       </Card>
