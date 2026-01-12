@@ -9,7 +9,7 @@ import Footer from "@/components/Footer";
 import BookCard from "@/components/BookCard";
 import AudioPlayer from "@/components/AudioPlayer";
 import { sampleBooks, categories, languages } from "@/data/books";
-import { Search, Filter, SlidersHorizontal, Globe, Library as LibraryIcon, BookOpen, Send } from "lucide-react";
+import { Search, Filter, SlidersHorizontal, Globe, Library as LibraryIcon, BookOpen, Send, Sparkles, Play, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -35,13 +35,46 @@ const Library = () => {
   const [selectedLanguage, setSelectedLanguage] = useState("All Languages");
   const [sortBy, setSortBy] = useState<"rating" | "price" | "duration">("rating");
   const [myAudiobooks, setMyAudiobooks] = useState<Audiobook[]>([]);
+  const [publishedAudiobooks, setPublishedAudiobooks] = useState<Audiobook[]>([]);
   const [isLoadingAudiobooks, setIsLoadingAudiobooks] = useState(false);
+  const [isLoadingPublished, setIsLoadingPublished] = useState(false);
+  const [selectedAudiobook, setSelectedAudiobook] = useState<Audiobook | null>(null);
+  const [discoverSearch, setDiscoverSearch] = useState("");
 
   useEffect(() => {
+    fetchPublishedAudiobooks();
     if (user) {
       fetchMyAudiobooks();
     }
   }, [user]);
+
+  const fetchPublishedAudiobooks = async () => {
+    setIsLoadingPublished(true);
+    try {
+      const { data, error } = await supabase
+        .from("audiobooks")
+        .select("*")
+        .eq("is_published", true)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setPublishedAudiobooks(data || []);
+    } catch (error) {
+      console.error("Error fetching published audiobooks:", error);
+    } finally {
+      setIsLoadingPublished(false);
+    }
+  };
+
+  const formatDuration = (seconds: number | null) => {
+    if (!seconds) return "Unknown";
+    const mins = Math.floor(seconds / 60);
+    const hrs = Math.floor(mins / 60);
+    if (hrs > 0) {
+      return `${hrs}h ${mins % 60}m`;
+    }
+    return `${mins}m`;
+  };
 
   const fetchMyAudiobooks = async () => {
     if (!user) return;
@@ -148,17 +181,140 @@ const Library = () => {
             </p>
           </div>
 
-          <Tabs defaultValue="browse" className="space-y-6">
-            <TabsList className="grid w-full max-w-md grid-cols-2">
+          <Tabs defaultValue="discover" className="space-y-6">
+            <TabsList className="grid w-full max-w-lg grid-cols-3">
+              <TabsTrigger value="discover" className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4" />
+                Discover
+              </TabsTrigger>
               <TabsTrigger value="browse" className="flex items-center gap-2">
                 <BookOpen className="w-4 h-4" />
-                Browse
+                Curated
               </TabsTrigger>
               <TabsTrigger value="my-library" className="flex items-center gap-2">
                 <LibraryIcon className="w-4 h-4" />
                 My Library
               </TabsTrigger>
             </TabsList>
+
+            {/* Discover Tab - Published Audiobooks from All Users */}
+            <TabsContent value="discover" className="space-y-6">
+              {/* Search */}
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Input
+                  placeholder="Search published audiobooks..."
+                  value={discoverSearch}
+                  onChange={(e) => setDiscoverSearch(e.target.value)}
+                  className="pl-10 h-12"
+                />
+              </div>
+
+              {/* Results Count */}
+              <div>
+                <p className="text-muted-foreground">
+                  <span className="font-semibold text-foreground">
+                    {publishedAudiobooks.filter(a => 
+                      a.title.toLowerCase().includes(discoverSearch.toLowerCase()) ||
+                      (a.author_name || "").toLowerCase().includes(discoverSearch.toLowerCase())
+                    ).length}
+                  </span>{" "}
+                  community audiobooks available
+                </p>
+              </div>
+
+              {isLoadingPublished ? (
+                <div className="text-center py-16">
+                  <p className="text-muted-foreground">Loading audiobooks...</p>
+                </div>
+              ) : publishedAudiobooks.length === 0 ? (
+                <div className="text-center py-16">
+                  <Sparkles className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="font-display text-xl font-semibold mb-2">
+                    No published audiobooks yet
+                  </h3>
+                  <p className="text-muted-foreground">
+                    Be the first to publish an audiobook!
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Currently Playing */}
+                  {selectedAudiobook && (
+                    <Card className="overflow-hidden mb-6 border-primary/20">
+                      <CardContent className="p-0">
+                        <AudioPlayer
+                          audioUrl={selectedAudiobook.audio_url || ""}
+                          title={selectedAudiobook.title}
+                          author={selectedAudiobook.author_name || "Unknown Author"}
+                          coverUrl={selectedAudiobook.cover_url || undefined}
+                          description={selectedAudiobook.description || undefined}
+                        />
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Audiobooks Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                    {publishedAudiobooks
+                      .filter(a => 
+                        a.title.toLowerCase().includes(discoverSearch.toLowerCase()) ||
+                        (a.author_name || "").toLowerCase().includes(discoverSearch.toLowerCase())
+                      )
+                      .map((audiobook, index) => (
+                      <Card 
+                        key={audiobook.id} 
+                        className={cn(
+                          "group cursor-pointer transition-all duration-300 hover:shadow-glow overflow-hidden",
+                          selectedAudiobook?.id === audiobook.id && "ring-2 ring-primary"
+                        )}
+                        onClick={() => setSelectedAudiobook(audiobook)}
+                        style={{ animationDelay: `${index * 0.05}s` }}
+                      >
+                        <div className="relative aspect-[3/4] overflow-hidden">
+                          {audiobook.cover_url ? (
+                            <img
+                              src={audiobook.cover_url}
+                              alt={audiobook.title}
+                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                              <BookOpen className="w-12 h-12 text-muted-foreground" />
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-foreground/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                          
+                          {/* Play button overlay */}
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                            <Button
+                              variant="hero"
+                              size="icon"
+                              className="w-14 h-14 rounded-full"
+                            >
+                              <Play className="w-6 h-6 ml-1" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="p-4">
+                          <h3 className="font-display text-lg font-semibold text-foreground line-clamp-1 mb-1">
+                            {audiobook.title}
+                          </h3>
+                          <p className="text-sm text-muted-foreground mb-2 line-clamp-1">
+                            {audiobook.author_name || "Unknown Author"}
+                          </p>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Clock className="w-3 h-3" />
+                            {formatDuration(audiobook.duration)}
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </>
+              )}
+            </TabsContent>
 
             {/* Browse Tab */}
             <TabsContent value="browse" className="space-y-6">
