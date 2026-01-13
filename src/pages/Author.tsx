@@ -66,6 +66,9 @@ const Author = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Generate combined script from chapters
   const combinedScriptText = chapters
@@ -76,6 +79,153 @@ const Author = () => {
   const totalWordCount = chapters.reduce((sum, ch) => sum + ch.wordCount, 0);
   const totalCharCount = combinedScriptText.length;
   const allChaptersMeetMinimum = chapters.every(ch => ch.wordCount >= MINIMUM_WORD_COUNT);
+
+  // Save draft to database
+  const handleSaveDraft = async () => {
+    if (!user) {
+      toast.error("Please sign in to save drafts");
+      return;
+    }
+
+    if (!bookTitle.trim()) {
+      toast.error("Please enter a book title first");
+      return;
+    }
+
+    setIsSavingDraft(true);
+    try {
+      let audiobookId = currentDraftId;
+
+      // Create or update audiobook record
+      if (!audiobookId) {
+        const { data: newAudiobook, error: insertError } = await supabase
+          .from("audiobooks")
+          .insert({
+            user_id: user.id,
+            title: bookTitle,
+            author_name: authorName || null,
+            description: bookDescription || null,
+            voice_id: selectedVoice,
+            cover_url: generatedCover,
+            is_published: false,
+          })
+          .select("id")
+          .single();
+
+        if (insertError) throw insertError;
+        audiobookId = newAudiobook.id;
+        setCurrentDraftId(audiobookId);
+      } else {
+        // Update existing audiobook
+        const { error: updateError } = await supabase
+          .from("audiobooks")
+          .update({
+            title: bookTitle,
+            author_name: authorName || null,
+            description: bookDescription || null,
+            voice_id: selectedVoice,
+            cover_url: generatedCover,
+          })
+          .eq("id", audiobookId)
+          .eq("user_id", user.id);
+
+        if (updateError) throw updateError;
+      }
+
+      // Delete existing chapters for this audiobook
+      const { error: deleteError } = await supabase
+        .from("chapters")
+        .delete()
+        .eq("audiobook_id", audiobookId)
+        .eq("user_id", user.id);
+
+      if (deleteError) throw deleteError;
+
+      // Insert new chapters
+      if (chapters.length > 0) {
+        const chaptersToInsert = chapters.map(ch => ({
+          audiobook_id: audiobookId,
+          user_id: user.id,
+          chapter_number: ch.chapterNumber,
+          title: ch.title,
+          content: ch.content,
+          word_count: ch.wordCount,
+        }));
+
+        const { error: chaptersError } = await supabase
+          .from("chapters")
+          .insert(chaptersToInsert);
+
+        if (chaptersError) throw chaptersError;
+      }
+
+      setHasUnsavedChanges(false);
+      toast.success("Draft saved successfully!");
+      fetchMyAudiobooks();
+    } catch (error) {
+      console.error("Save draft error:", error);
+      toast.error("Failed to save draft");
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
+  // Load chapters for an audiobook
+  const loadDraft = async (audiobook: MyAudiobook) => {
+    if (!user) return;
+
+    try {
+      const { data: chaptersData, error } = await supabase
+        .from("chapters")
+        .select("*")
+        .eq("audiobook_id", audiobook.id)
+        .eq("user_id", user.id)
+        .order("chapter_number", { ascending: true });
+
+      if (error) throw error;
+
+      setCurrentDraftId(audiobook.id);
+      setBookTitle(audiobook.title);
+      setAuthorName(audiobook.author_name || "");
+      setBookDescription(audiobook.description || "");
+      setSelectedVoice(audiobook.voice_id);
+      setGeneratedCover(audiobook.cover_url);
+      setGeneratedAudio(audiobook.audio_url);
+
+      if (chaptersData && chaptersData.length > 0) {
+        const loadedChapters: Chapter[] = chaptersData.map(ch => ({
+          id: ch.id,
+          title: ch.title,
+          content: ch.content,
+          wordCount: ch.word_count,
+          chapterNumber: ch.chapter_number,
+        }));
+        setChapters(loadedChapters);
+      } else {
+        setChapters([]);
+      }
+
+      setHasUnsavedChanges(false);
+      toast.success(`Loaded "${audiobook.title}" for editing`);
+    } catch (error) {
+      console.error("Load draft error:", error);
+      toast.error("Failed to load draft");
+    }
+  };
+
+  // Reset to new draft
+  const handleNewDraft = () => {
+    setCurrentDraftId(null);
+    setChapters([]);
+    setBookTitle("");
+    setAuthorName("");
+    setBookDescription("");
+    setGeneratedCover(null);
+    setGeneratedAudio(null);
+    setAudioDuration(null);
+    setSelectedVoice("george");
+    setHasUnsavedChanges(false);
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -143,6 +293,7 @@ const Author = () => {
       }
 
       setChapters(prev => [...prev, ...newChapters]);
+      setHasUnsavedChanges(true);
       
       const totalNewWords = newChapters.reduce((sum, ch) => sum + ch.wordCount, 0);
       toast.success(`Added ${newChapters.length} chapter(s) with ${totalNewWords.toLocaleString()} words`);
@@ -164,6 +315,7 @@ const Author = () => {
       chapterNumber: chapters.length + 1,
     };
     setChapters(prev => [...prev, newChapter]);
+    setHasUnsavedChanges(true);
     toast.success("New chapter added - click edit to add content");
   };
 
@@ -171,6 +323,7 @@ const Author = () => {
     setChapters(prev =>
       prev.map(ch => (ch.id === id ? { ...ch, ...updates } : ch))
     );
+    setHasUnsavedChanges(true);
   };
 
   const handleDeleteChapter = (id: string) => {
@@ -182,6 +335,7 @@ const Author = () => {
         chapterNumber: index + 1,
       }));
     });
+    setHasUnsavedChanges(true);
     toast.success("Chapter deleted");
   };
 
@@ -202,10 +356,12 @@ const Author = () => {
         chapterNumber: i + 1,
       }));
     });
+    setHasUnsavedChanges(true);
   };
 
   const handleClearAllChapters = () => {
     setChapters([]);
+    setHasUnsavedChanges(true);
     toast.success("All chapters cleared");
   };
 
@@ -526,10 +682,25 @@ const Author = () => {
                 {/* Script Upload */}
                 <Card variant="elevated">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="w-5 h-5 text-primary" />
-                      Upload Script
-                    </CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-primary" />
+                        {currentDraftId ? "Edit Audiobook" : "Create New Audiobook"}
+                      </CardTitle>
+                      <div className="flex items-center gap-2">
+                        {hasUnsavedChanges && (
+                          <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                            Unsaved changes
+                          </Badge>
+                        )}
+                        {currentDraftId && (
+                          <Button variant="ghost" size="sm" onClick={handleNewDraft}>
+                            <Plus className="w-4 h-4 mr-1" />
+                            New
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <label className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary transition-colors cursor-pointer block">
@@ -605,6 +776,28 @@ const Author = () => {
                           </div>
                         )}
                       </div>
+                    )}
+
+                    {/* Save Draft Button */}
+                    {user && (chapters.length > 0 || bookTitle.trim()) && (
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={handleSaveDraft}
+                        disabled={isSavingDraft || !bookTitle.trim()}
+                      >
+                        {isSavingDraft ? (
+                          <>
+                            <Clock className="w-4 h-4 mr-2 animate-spin" />
+                            Saving Draft...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4 mr-2" />
+                            {currentDraftId ? "Update Draft" : "Save Draft"}
+                          </>
+                        )}
+                      </Button>
                     )}
 
                     <div className="space-y-2">
@@ -849,9 +1042,17 @@ const Author = () => {
 
                             <div className="flex gap-2 mt-4">
                               <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => loadDraft(book)}
+                              >
+                                Edit
+                              </Button>
+                              <Button
                                 variant={book.is_published ? "outline" : "hero"}
                                 size="sm"
                                 onClick={() => handlePublishToggle(book)}
+                                disabled={!book.audio_url}
                               >
                                 {book.is_published ? "Unpublish" : "Publish"}
                               </Button>
