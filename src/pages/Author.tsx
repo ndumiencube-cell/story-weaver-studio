@@ -7,8 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import StarRating from "@/components/StarRating";
 import AudioPlayer from "@/components/AudioPlayer";
+import ChapterEditor, { Chapter, countWords, MINIMUM_WORD_COUNT } from "@/components/ChapterEditor";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -22,10 +22,11 @@ import {
   Image,
   Wand2,
   Download,
-  Eye,
   Clock,
   CheckCircle2,
   Save,
+  Plus,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -50,15 +51,9 @@ const VOICE_OPTIONS = [
   { id: "lily", name: "Lily", gender: "Female", description: "Warm, narrative" },
 ];
 
-interface UploadedFile {
-  name: string;
-  text: string;
-  charCount: number;
-}
-
 const Author = () => {
   const { user } = useAuth();
-  const [scriptText, setScriptText] = useState("");
+  const [chapters, setChapters] = useState<Chapter[]>([]);
   const [bookTitle, setBookTitle] = useState("");
   const [authorName, setAuthorName] = useState("");
   const [bookDescription, setBookDescription] = useState("");
@@ -71,7 +66,16 @@ const Author = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+
+  // Generate combined script from chapters
+  const combinedScriptText = chapters
+    .sort((a, b) => a.chapterNumber - b.chapterNumber)
+    .map(ch => `--- Chapter ${ch.chapterNumber}: ${ch.title} ---\n\n${ch.content}`)
+    .join("\n\n");
+
+  const totalWordCount = chapters.reduce((sum, ch) => sum + ch.wordCount, 0);
+  const totalCharCount = combinedScriptText.length;
+  const allChaptersMeetMinimum = chapters.every(ch => ch.wordCount >= MINIMUM_WORD_COUNT);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -90,15 +94,17 @@ const Author = () => {
     }
 
     setIsUploading(true);
-    const newFiles: UploadedFile[] = [];
+    const newChapters: Chapter[] = [];
+    const startChapterNum = chapters.length + 1;
 
     try {
-      for (const file of fileArray) {
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i];
         const fileExtension = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+        let text = "";
         
         if (fileExtension === ".txt") {
-          const text = await file.text();
-          newFiles.push({ name: file.name, text, charCount: text.length });
+          text = await file.text();
         } else {
           const formData = new FormData();
           formData.append("file", file);
@@ -120,42 +126,87 @@ const Author = () => {
             throw new Error(data.error || `Failed to parse ${file.name}`);
           }
 
-          newFiles.push({ name: file.name, text: data.text, charCount: data.charCount });
+          text = data.text;
         }
+
+        // Create chapter from file
+        const chapterTitle = file.name.replace(/\.(txt|pdf|docx)$/i, "");
+        const wordCount = countWords(text);
+
+        newChapters.push({
+          id: crypto.randomUUID(),
+          title: chapterTitle,
+          content: text,
+          wordCount,
+          chapterNumber: startChapterNum + i,
+        });
       }
 
-      // Add to existing files
-      const allFiles = [...uploadedFiles, ...newFiles];
-      setUploadedFiles(allFiles);
+      setChapters(prev => [...prev, ...newChapters]);
       
-      // Combine all text
-      const combinedText = allFiles.map(f => f.text).join("\n\n--- Chapter ---\n\n");
-      setScriptText(combinedText);
-      
-      const totalChars = allFiles.reduce((sum, f) => sum + f.charCount, 0);
-      toast.success(`Added ${newFiles.length} file(s). Total: ${totalChars.toLocaleString()} characters from ${allFiles.length} document(s)`);
+      const totalNewWords = newChapters.reduce((sum, ch) => sum + ch.wordCount, 0);
+      toast.success(`Added ${newChapters.length} chapter(s) with ${totalNewWords.toLocaleString()} words`);
     } catch (error) {
       console.error("File upload error:", error);
       toast.error(error instanceof Error ? error.message : "Failed to read files");
     } finally {
       setIsUploading(false);
-      // Reset input to allow re-uploading same files
       e.target.value = "";
     }
   };
 
-  const handleRemoveFile = (index: number) => {
-    const newFiles = uploadedFiles.filter((_, i) => i !== index);
-    setUploadedFiles(newFiles);
-    const combinedText = newFiles.map(f => f.text).join("\n\n--- Chapter ---\n\n");
-    setScriptText(combinedText);
-    toast.success("File removed");
+  const handleAddEmptyChapter = () => {
+    const newChapter: Chapter = {
+      id: crypto.randomUUID(),
+      title: `Chapter ${chapters.length + 1}`,
+      content: "",
+      wordCount: 0,
+      chapterNumber: chapters.length + 1,
+    };
+    setChapters(prev => [...prev, newChapter]);
+    toast.success("New chapter added - click edit to add content");
   };
 
-  const handleClearAllFiles = () => {
-    setUploadedFiles([]);
-    setScriptText("");
-    toast.success("All files cleared");
+  const handleUpdateChapter = (id: string, updates: Partial<Chapter>) => {
+    setChapters(prev =>
+      prev.map(ch => (ch.id === id ? { ...ch, ...updates } : ch))
+    );
+  };
+
+  const handleDeleteChapter = (id: string) => {
+    setChapters(prev => {
+      const filtered = prev.filter(ch => ch.id !== id);
+      // Renumber chapters
+      return filtered.map((ch, index) => ({
+        ...ch,
+        chapterNumber: index + 1,
+      }));
+    });
+    toast.success("Chapter deleted");
+  };
+
+  const handleMoveChapter = (id: string, direction: "up" | "down") => {
+    setChapters(prev => {
+      const index = prev.findIndex(ch => ch.id === id);
+      if (index === -1) return prev;
+      
+      const newIndex = direction === "up" ? index - 1 : index + 1;
+      if (newIndex < 0 || newIndex >= prev.length) return prev;
+
+      const newChapters = [...prev];
+      [newChapters[index], newChapters[newIndex]] = [newChapters[newIndex], newChapters[index]];
+      
+      // Renumber chapters
+      return newChapters.map((ch, i) => ({
+        ...ch,
+        chapterNumber: i + 1,
+      }));
+    });
+  };
+
+  const handleClearAllChapters = () => {
+    setChapters([]);
+    toast.success("All chapters cleared");
   };
 
   interface MyAudiobook {
@@ -284,13 +335,18 @@ const Author = () => {
   };
 
   const handleConvertToAudio = async () => {
-    if (!scriptText.trim()) {
-      toast.error("Please enter or upload your script first");
+    if (chapters.length === 0) {
+      toast.error("Please add at least one chapter first");
       return;
     }
 
-    if (scriptText.length > 5000) {
-      toast.error("Script is too long. Maximum 5000 characters for demo.");
+    if (!allChaptersMeetMinimum) {
+      toast.error(`Each chapter must have at least ${MINIMUM_WORD_COUNT} words`);
+      return;
+    }
+
+    if (combinedScriptText.length > 5000) {
+      toast.error("Total content is too long. Maximum 5000 characters for demo.");
       return;
     }
 
@@ -306,7 +362,7 @@ const Author = () => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: JSON.stringify({ text: scriptText, voice: selectedVoice }),
+          body: JSON.stringify({ text: combinedScriptText, voice: selectedVoice }),
         }
       );
 
@@ -383,14 +439,13 @@ const Author = () => {
       toast.success("Audiobook saved to your library!");
       
       // Reset form
-      setScriptText("");
+      setChapters([]);
       setBookTitle("");
       setAuthorName("");
       setBookDescription("");
       setGeneratedAudio(null);
       setGeneratedCover(null);
       setAudioDuration(null);
-      setUploadedFiles([]);
     } catch (error) {
       console.error("Save error:", error);
       toast.error("Failed to save audiobook");
@@ -498,28 +553,57 @@ const Author = () => {
                       </Button>
                     </label>
 
-                    {uploadedFiles.length > 0 && (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">Uploaded Files ({uploadedFiles.length})</span>
-                          <Button variant="ghost" size="sm" onClick={handleClearAllFiles}>
-                            Clear All
-                          </Button>
+                    {/* Add chapter buttons */}
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddEmptyChapter}
+                        className="flex-1"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Empty Chapter
+                      </Button>
+                      {chapters.length > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleClearAllChapters}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          Clear All
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Chapter Editor */}
+                    <ChapterEditor
+                      chapters={chapters}
+                      onUpdateChapter={handleUpdateChapter}
+                      onDeleteChapter={handleDeleteChapter}
+                      onMoveChapter={handleMoveChapter}
+                    />
+
+                    {/* Stats */}
+                    {chapters.length > 0 && (
+                      <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                        <div className="flex items-center gap-4 text-sm">
+                          <span className="text-muted-foreground">
+                            {chapters.length} chapter(s)
+                          </span>
+                          <span className="text-muted-foreground">
+                            {totalWordCount.toLocaleString()} words
+                          </span>
+                          <span className="text-muted-foreground">
+                            {totalCharCount.toLocaleString()}/5000 chars
+                          </span>
                         </div>
-                        <div className="space-y-1">
-                          {uploadedFiles.map((file, index) => (
-                            <div key={index} className="flex items-center justify-between bg-muted/50 rounded-lg px-3 py-2 text-sm">
-                              <div className="flex items-center gap-2 truncate">
-                                <FileText className="w-4 h-4 text-primary shrink-0" />
-                                <span className="truncate">{file.name}</span>
-                                <span className="text-muted-foreground shrink-0">({file.charCount.toLocaleString()} chars)</span>
-                              </div>
-                              <Button variant="ghost" size="sm" onClick={() => handleRemoveFile(index)} className="h-6 w-6 p-0">
-                                ×
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
+                        {!allChaptersMeetMinimum && (
+                          <div className="flex items-center gap-1 text-destructive text-xs">
+                            <AlertCircle className="w-3 h-3" />
+                            Some chapters need more words
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -551,13 +635,6 @@ const Author = () => {
                       />
                     </div>
 
-                    <Textarea
-                      placeholder="Paste your script here (English or isiZulu)..."
-                      value={scriptText}
-                      onChange={(e) => setScriptText(e.target.value)}
-                      className="min-h-[150px]"
-                    />
-
                     <div className="flex flex-col gap-2">
                       <label className="text-sm font-medium">Select Voice:</label>
                       <Select value={selectedVoice} onValueChange={setSelectedVoice}>
@@ -579,9 +656,6 @@ const Author = () => {
                           ))}
                         </SelectContent>
                       </Select>
-                      <span className="text-xs text-muted-foreground">
-                        {scriptText.length}/5000 chars
-                      </span>
                     </div>
 
                     <Button
