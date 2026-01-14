@@ -14,17 +14,55 @@ export type Database = {
   }
   public: {
     Tables: {
+      audiobook_ratings: {
+        Row: {
+          audiobook_id: string
+          created_at: string
+          id: string
+          rating: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          audiobook_id: string
+          created_at?: string
+          id?: string
+          rating: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          audiobook_id?: string
+          created_at?: string
+          id?: string
+          rating?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audiobook_ratings_audiobook_id_fkey"
+            columns: ["audiobook_id"]
+            isOneToOne: false
+            referencedRelation: "audiobooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audiobooks: {
         Row: {
           audio_url: string | null
           author_name: string | null
+          average_rating: number | null
           cover_url: string | null
           created_at: string
           description: string | null
           duration: number | null
           id: string
           is_published: boolean
+          language: string | null
           play_count: number
+          rating_count: number | null
           title: string
           updated_at: string
           user_id: string
@@ -33,13 +71,16 @@ export type Database = {
         Insert: {
           audio_url?: string | null
           author_name?: string | null
+          average_rating?: number | null
           cover_url?: string | null
           created_at?: string
           description?: string | null
           duration?: number | null
           id?: string
           is_published?: boolean
+          language?: string | null
           play_count?: number
+          rating_count?: number | null
           title: string
           updated_at?: string
           user_id: string
@@ -48,13 +89,16 @@ export type Database = {
         Update: {
           audio_url?: string | null
           author_name?: string | null
+          average_rating?: number | null
           cover_url?: string | null
           created_at?: string
           description?: string | null
           duration?: number | null
           id?: string
           is_published?: boolean
+          language?: string | null
           play_count?: number
+          rating_count?: number | null
           title?: string
           updated_at?: string
           user_id?: string
@@ -169,6 +213,10 @@ export type Database = {
     Functions: {
       increment_play_count: {
         Args: { audiobook_id: string }
+        Returns: undefined
+      }
+      rate_audiobook: {
+        Args: { p_audiobook_id: string; p_rating: number }
         Returns: undefined
       }
     }

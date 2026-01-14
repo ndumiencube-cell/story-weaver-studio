@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Gauge, Trash2 } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Gauge, Trash2, Headphones, Star } from "lucide-react";
+import RatingInput from "./RatingInput";
+import StarRating from "./StarRating";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import {
@@ -20,6 +22,10 @@ interface AudioPlayerProps {
   className?: string;
   compact?: boolean;
   onDelete?: () => void;
+  audiobookId?: string;
+  averageRating?: number;
+  ratingCount?: number;
+  playCount?: number;
 }
 
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -33,6 +39,10 @@ const AudioPlayer = ({
   className,
   compact = false,
   onDelete,
+  audiobookId,
+  averageRating,
+  ratingCount,
+  playCount,
 }: AudioPlayerProps) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -193,6 +203,25 @@ const AudioPlayer = ({
             <div>
               {title && <h3 className="font-display text-lg font-semibold">{title}</h3>}
               {author && <p className="text-sm text-muted-foreground">{author}</p>}
+              
+              {/* Stats: Rating and Play Count */}
+              <div className="flex items-center gap-4 mt-1">
+                {averageRating !== undefined && averageRating > 0 && (
+                  <div className="flex items-center gap-1">
+                    <StarRating rating={averageRating} size="sm" />
+                    <span className="text-xs text-muted-foreground">
+                      ({ratingCount || 0})
+                    </span>
+                  </div>
+                )}
+                {playCount !== undefined && playCount > 0 && (
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Headphones className="w-3 h-3" />
+                    <span>{playCount.toLocaleString()} plays</span>
+                  </div>
+                )}
+              </div>
+              
               {description && (
                 <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{description}</p>
               )}
@@ -208,6 +237,11 @@ const AudioPlayer = ({
               </Button>
             )}
           </div>
+          
+          {/* Rating Input */}
+          {audiobookId && (
+            <RatingInput audiobookId={audiobookId} className="pt-1" />
+          )}
 
           {/* Progress bar */}
           <div className="space-y-2">
