@@ -51,6 +51,12 @@ const VOICE_OPTIONS = [
   { id: "lily", name: "Lily", gender: "Female", description: "Warm, narrative" },
 ];
 
+// Language options
+const LANGUAGE_OPTIONS = [
+  { id: "isiZulu", name: "isiZulu", description: "Zulu language" },
+  { id: "English", name: "English", description: "English language" },
+];
+
 const Author = () => {
   const { user } = useAuth();
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -63,6 +69,7 @@ const Author = () => {
   const [isConverting, setIsConverting] = useState(false);
   const [generatedAudio, setGeneratedAudio] = useState<string | null>(null);
   const [selectedVoice, setSelectedVoice] = useState("george");
+  const [selectedLanguage, setSelectedLanguage] = useState("isiZulu");
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
@@ -224,6 +231,7 @@ const Author = () => {
     setGeneratedAudio(null);
     setAudioDuration(null);
     setSelectedVoice("george");
+    setSelectedLanguage("isiZulu");
     setHasUnsavedChanges(false);
   };
 
@@ -518,7 +526,7 @@ const Author = () => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: JSON.stringify({ text: combinedScriptText, voice: selectedVoice }),
+          body: JSON.stringify({ text: combinedScriptText, voice: selectedVoice, language: selectedLanguage }),
         }
       );
 
@@ -588,6 +596,7 @@ const Author = () => {
           cover_url: generatedCover,
           voice_id: selectedVoice,
           duration: audioDuration,
+          language: selectedLanguage,
         });
 
       if (insertError) throw insertError;
@@ -828,27 +837,45 @@ const Author = () => {
                       />
                     </div>
 
-                    <div className="flex flex-col gap-2">
-                      <label className="text-sm font-medium">Select Voice:</label>
-                      <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Choose a voice" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Male Voices</div>
-                          {VOICE_OPTIONS.filter(v => v.gender === "Male").map((voice) => (
-                            <SelectItem key={voice.id} value={voice.id}>
-                              {voice.name} - {voice.description}
-                            </SelectItem>
-                          ))}
-                          <div className="px-2 py-1 text-xs font-semibold text-muted-foreground mt-2">Female Voices</div>
-                          {VOICE_OPTIONS.filter(v => v.gender === "Female").map((voice) => (
-                            <SelectItem key={voice.id} value={voice.id}>
-                              {voice.name} - {voice.description}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-2">
+                        <label className="text-sm font-medium">Language:</label>
+                        <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Choose language" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {LANGUAGE_OPTIONS.map((lang) => (
+                              <SelectItem key={lang.id} value={lang.id}>
+                                {lang.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="flex flex-col gap-2">
+                        <label className="text-sm font-medium">Voice:</label>
+                        <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Choose a voice" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Male Voices</div>
+                            {VOICE_OPTIONS.filter(v => v.gender === "Male").map((voice) => (
+                              <SelectItem key={voice.id} value={voice.id}>
+                                {voice.name} - {voice.description}
+                              </SelectItem>
+                            ))}
+                            <div className="px-2 py-1 text-xs font-semibold text-muted-foreground mt-2">Female Voices</div>
+                            {VOICE_OPTIONS.filter(v => v.gender === "Female").map((voice) => (
+                              <SelectItem key={voice.id} value={voice.id}>
+                                {voice.name} - {voice.description}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
 
                     <Button

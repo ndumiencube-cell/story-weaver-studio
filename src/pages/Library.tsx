@@ -9,7 +9,8 @@ import Footer from "@/components/Footer";
 import BookCard from "@/components/BookCard";
 import AudioPlayer from "@/components/AudioPlayer";
 import { sampleBooks, categories, languages } from "@/data/books";
-import { Search, Filter, SlidersHorizontal, Globe, Library as LibraryIcon, BookOpen, Send, Sparkles, Play, Clock, Headphones } from "lucide-react";
+import { Search, Filter, SlidersHorizontal, Globe, Library as LibraryIcon, BookOpen, Send, Sparkles, Play, Clock, Headphones, Star } from "lucide-react";
+import StarRating from "@/components/StarRating";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,6 +28,9 @@ interface Audiobook {
   is_published: boolean;
   created_at: string;
   play_count: number;
+  average_rating: number | null;
+  rating_count: number | null;
+  language: string | null;
 }
 
 const Library = () => {
@@ -270,6 +274,10 @@ const Library = () => {
                           author={selectedAudiobook.author_name || "Unknown Author"}
                           coverUrl={selectedAudiobook.cover_url || undefined}
                           description={selectedAudiobook.description || undefined}
+                          audiobookId={selectedAudiobook.id}
+                          averageRating={selectedAudiobook.average_rating || 0}
+                          ratingCount={selectedAudiobook.rating_count || 0}
+                          playCount={selectedAudiobook.play_count}
                         />
                       </CardContent>
                     </Card>
@@ -333,6 +341,15 @@ const Library = () => {
                           <p className="text-sm text-muted-foreground mb-2 line-clamp-1">
                             {audiobook.author_name || "Unknown Author"}
                           </p>
+                          {/* Rating */}
+                          {(audiobook.average_rating || 0) > 0 && (
+                            <div className="flex items-center gap-1 mb-2">
+                              <StarRating rating={audiobook.average_rating || 0} size="sm" />
+                              <span className="text-xs text-muted-foreground">
+                                ({audiobook.rating_count || 0})
+                              </span>
+                            </div>
+                          )}
                           <div className="flex items-center justify-between text-xs text-muted-foreground">
                             <div className="flex items-center gap-1">
                               <Clock className="w-3 h-3" />
