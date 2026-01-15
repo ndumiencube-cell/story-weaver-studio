@@ -6,68 +6,35 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ElevenLabs voice options optimized for different languages
-const VOICES = {
+// ElevenLabs voice options - preset voices
+const VOICES: Record<string, { id: string; name: string }> = {
   // Male voices - good for English and multilingual
-  george: { id: "JBFqnCBsd6RMkjVDRZzb", name: "George", gender: "male", description: "Warm, authoritative" },
-  brian: { id: "nPczCjzI2devNBz1zQrb", name: "Brian", gender: "male", description: "Deep, mature" },
-  daniel: { id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", gender: "male", description: "British, professional" },
-  liam: { id: "TX3LPaxmHKxFdv7VOQHJ", name: "Liam", gender: "male", description: "Young, friendly" },
-  charlie: { id: "IKne3meq5aSn9XLyUdCD", name: "Charlie", gender: "male", description: "Conversational" },
+  george: { id: "JBFqnCBsd6RMkjVDRZzb", name: "George" },
+  brian: { id: "nPczCjzI2devNBz1zQrb", name: "Brian" },
+  daniel: { id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel" },
+  liam: { id: "TX3LPaxmHKxFdv7VOQHJ", name: "Liam" },
+  charlie: { id: "IKne3meq5aSn9XLyUdCD", name: "Charlie" },
   // Female voices
-  sarah: { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", gender: "female", description: "Warm, engaging" },
-  laura: { id: "FGY2WhTYpPnrIDTdsKH5", name: "Laura", gender: "female", description: "Soft, soothing" },
-  alice: { id: "Xb7hH8MSUJpSbSDYk0k2", name: "Alice", gender: "female", description: "British, elegant" },
-  jessica: { id: "cgSgspJ2msm6clMCkdW9", name: "Jessica", gender: "female", description: "Expressive, dynamic" },
-  lily: { id: "pFZP5JQG7iQjIQuC4Bku", name: "Lily", gender: "female", description: "Warm, narrative" },
+  sarah: { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah" },
+  laura: { id: "FGY2WhTYpPnrIDTdsKH5", name: "Laura" },
+  alice: { id: "Xb7hH8MSUJpSbSDYk0k2", name: "Alice" },
+  jessica: { id: "cgSgspJ2msm6clMCkdW9", name: "Jessica" },
+  lily: { id: "pFZP5JQG7iQjIQuC4Bku", name: "Lily" },
 };
-
-// Text preprocessing for better Zulu/African language pronunciation
-function preprocessZuluText(text: string): string {
-  // Add pronunciation hints for common Zulu patterns
-  let processed = text;
-  
-  // Handle click consonants - add slight pauses for clarity
-  // Zulu has three main click consonants: c (dental), q (alveolar), x (lateral)
-  
-  // Ensure proper spacing around Zulu-specific letter combinations
-  // Handle 'hl' (voiceless lateral fricative)
-  processed = processed.replace(/\bhl/gi, 'shl');
-  
-  // Handle 'dl' which has a lateral click quality
-  processed = processed.replace(/\bdl/gi, 'dl');
-  
-  // Common Zulu greetings and words - add phonetic hints
-  const pronunciationGuide: Record<string, string> = {
-    'sawubona': 'sah-woo-boh-nah',
-    'ngiyabonga': 'n-gee-yah-boh-n-gah',
-    'yebo': 'yeh-boh',
-    'unjani': 'oon-jah-nee',
-    'ngiyaphila': 'n-gee-yah-pee-lah',
-  };
-  
-  // Don't replace words, the multilingual model handles Zulu
-  // Just ensure clean text for the TTS
-  
-  // Clean up extra whitespace
-  processed = processed.replace(/\s+/g, ' ').trim();
-  
-  return processed;
-}
 
 // Detect if text is likely Zulu/African language
 function detectLanguage(text: string): 'zulu' | 'english' | 'mixed' {
   const zuluPatterns = [
-    /\bng[aeiou]/i,  // Common Zulu prefix
-    /\buku/i,        // Infinitive prefix
-    /\bisi/i,        // Class prefix
-    /\bum[aeiou]/i,  // Class prefix
-    /\baba/i,        // Class prefix
-    /nkosi/i,        // Lord/chief
-    /bona/i,         // See
-    /hamba/i,        // Go
-    /yebo/i,         // Yes
-    /cha/i,          // No (short)
+    /\bng[aeiou]/i,
+    /\buku/i,
+    /\bisi/i,
+    /\bum[aeiou]/i,
+    /\baba/i,
+    /nkosi/i,
+    /bona/i,
+    /hamba/i,
+    /yebo/i,
+    /cha\b/i,
   ];
   
   const zuluMatches = zuluPatterns.filter(pattern => pattern.test(text)).length;
@@ -77,7 +44,6 @@ function detectLanguage(text: string): 'zulu' | 'english' | 'mixed' {
     return 'zulu';
   }
   
-  // Check for English patterns
   const englishWords = ['the', 'and', 'is', 'are', 'was', 'were', 'have', 'has', 'been', 'will'];
   const englishMatches = englishWords.filter(word => 
     new RegExp(`\\b${word}\\b`, 'i').test(text)
@@ -87,7 +53,7 @@ function detectLanguage(text: string): 'zulu' | 'english' | 'mixed' {
     return zuluMatches >= 1 ? 'mixed' : 'english';
   }
   
-  return 'zulu'; // Default to Zulu for this app
+  return 'zulu';
 }
 
 serve(async (req) => {
@@ -96,7 +62,7 @@ serve(async (req) => {
   }
 
   try {
-    const { text, voice = "george", language = "isiZulu" } = await req.json();
+    const { text, voice = "george", language = "isiZulu", isCustomVoice = false } = await req.json();
     const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
 
     if (!ELEVENLABS_API_KEY) {
@@ -112,41 +78,64 @@ serve(async (req) => {
 
     if (text.length > 5000) {
       return new Response(
-        JSON.stringify({ error: "Text is too long. Maximum 5000 characters per request." }),
+        JSON.stringify({ error: "Text too long. Maximum 5000 characters." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Detect language and preprocess if Zulu
-    const detectedLang = detectLanguage(text);
-    let processedText = text;
+    // Determine the voice ID to use
+    let voiceId: string;
     
-    if (language === "isiZulu" || detectedLang === 'zulu' || detectedLang === 'mixed') {
-      processedText = preprocessZuluText(text);
-      console.log("Detected Zulu content, using multilingual model with optimized settings");
+    if (isCustomVoice) {
+      // Custom cloned voice - the voice parameter IS the voice ID
+      voiceId = voice;
+      console.log(`Using custom cloned voice: ${voiceId}`);
+    } else {
+      // Preset voice - look up the ID from our mapping
+      const voiceConfig = VOICES[voice.toLowerCase()];
+      if (!voiceConfig) {
+        return new Response(
+          JSON.stringify({ error: `Invalid voice: ${voice}` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      voiceId = voiceConfig.id;
+      console.log(`Using preset voice: ${voiceConfig.name} (${voiceId})`);
     }
 
-    // Get voice ID from voice name, fallback to george
-    const voiceConfig = VOICES[voice as keyof typeof VOICES] || VOICES.george;
-    const voiceId = voiceConfig.id;
+    // Detect language from text
+    const detectedLanguage = detectLanguage(text);
+    const isZulu = language === "isiZulu" || detectedLanguage === 'zulu';
+    
+    console.log(`Converting text to speech. Language: ${language}, Detected: ${detectedLanguage}, Using custom voice: ${isCustomVoice}`);
 
-    console.log("Converting text to speech, length:", processedText.length, "voice:", voice, "voiceId:", voiceId, "language:", language);
-
-    // Use multilingual v2 model which has better non-English support
-    // Adjust settings for clearer pronunciation of Zulu
-    const voiceSettings = detectedLang === 'zulu' || language === "isiZulu" 
+    // Voice settings optimized for the content
+    const voice_settings = isZulu && !isCustomVoice 
       ? {
-          stability: 0.7,           // Higher stability for clearer pronunciation
-          similarity_boost: 0.8,    // Good voice matching
-          style: 0.3,               // Lower style for more neutral/clear speech
+          // For Zulu with preset voices, use more stable settings
+          stability: 0.7,
+          similarity_boost: 0.8,
+          style: 0.3,
+          use_speaker_boost: true,
+        }
+      : isCustomVoice
+      ? {
+          // For custom cloned voices, maximize similarity to original
+          stability: 0.6,
+          similarity_boost: 0.9,
+          style: 0.2,
           use_speaker_boost: true,
         }
       : {
-          stability: 0.6,
+          // Default settings for English
+          stability: 0.5,
           similarity_boost: 0.75,
-          style: 0.4,
+          style: 0.5,
           use_speaker_boost: true,
         };
+
+    // Always use multilingual model for best language support
+    const model_id = "eleven_multilingual_v2";
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
@@ -157,44 +146,45 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          text: processedText,
-          model_id: "eleven_multilingual_v2", // Best model for non-English languages
-          voice_settings: voiceSettings,
+          text,
+          model_id,
+          voice_settings,
         }),
       }
     );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("ElevenLabs API error:", response.status, errorText);
+      console.error("ElevenLabs API error:", errorText);
       
-      if (response.status === 401) {
-        throw new Error("Invalid API key");
-      } else if (response.status === 429) {
-        throw new Error("Rate limit exceeded. Please try again later.");
+      // Check for specific error types
+      if (response.status === 422) {
+        throw new Error("Invalid voice ID or voice has been deleted");
       }
-      throw new Error(`TTS generation failed: ${response.status}`);
+      
+      throw new Error(`TTS conversion failed: ${response.status}`);
     }
 
     const audioBuffer = await response.arrayBuffer();
     const base64Audio = base64Encode(audioBuffer);
 
-    console.log("Audio generated successfully, size:", audioBuffer.byteLength);
+    // Estimate duration based on word count (roughly 150 words per minute)
+    const wordCount = text.split(/\s+/).length;
+    const estimatedDuration = Math.round((wordCount / 150) * 60);
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         audioContent: base64Audio,
-        duration: Math.ceil(text.length / 15), // Rough estimate: ~15 chars per second
-        voice: voiceConfig,
-        language: detectedLang,
-        message: "Audiobook generated successfully" 
+        duration: estimatedDuration,
+        model: model_id,
+        voiceUsed: isCustomVoice ? "custom" : voice,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("Error in convert-to-audiobook function:", error);
+    console.error("Conversion error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: error instanceof Error ? error.message : "Failed to convert to audiobook" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

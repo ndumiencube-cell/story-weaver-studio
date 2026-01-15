@@ -9,6 +9,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AudioPlayer from "@/components/AudioPlayer";
 import ChapterEditor, { Chapter, countWords, MINIMUM_WORD_COUNT } from "@/components/ChapterEditor";
+import VoiceRecorder from "@/components/VoiceRecorder";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -27,6 +28,7 @@ import {
   Save,
   Plus,
   AlertCircle,
+  Mic,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -76,6 +78,33 @@ const Author = () => {
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [customVoiceId, setCustomVoiceId] = useState<string | null>(null);
+  const [customVoiceName, setCustomVoiceName] = useState<string | null>(null);
+  const [useCustomVoice, setUseCustomVoice] = useState(false);
+
+  // Fetch user's custom voice from profile
+  useEffect(() => {
+    const fetchCustomVoice = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("custom_voice_id, custom_voice_name")
+        .eq("id", user.id)
+        .single();
+      
+      if (data?.custom_voice_id) {
+        setCustomVoiceId(data.custom_voice_id);
+        setCustomVoiceName(data.custom_voice_name);
+      }
+    };
+    fetchCustomVoice();
+  }, [user]);
+
+  const handleVoiceCloned = (voiceId: string, voiceName: string) => {
+    setCustomVoiceId(voiceId);
+    setCustomVoiceName(voiceName);
+    setUseCustomVoice(true);
+  };
 
   // Generate combined script from chapters
   const combinedScriptText = chapters
@@ -518,6 +547,10 @@ const Author = () => {
     setGeneratedAudio(null);
     
     try {
+      // Use custom voice if enabled, otherwise use selected preset voice
+      const voiceToUse = useCustomVoice && customVoiceId ? customVoiceId : selectedVoice;
+      const isCustomVoice = useCustomVoice && customVoiceId;
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/convert-to-audiobook`,
         {
@@ -526,7 +559,12 @@ const Author = () => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: JSON.stringify({ text: combinedScriptText, voice: selectedVoice, language: selectedLanguage }),
+          body: JSON.stringify({ 
+            text: combinedScriptText, 
+            voice: voiceToUse, 
+            language: selectedLanguage,
+            isCustomVoice: isCustomVoice 
+          }),
         }
       );
 
@@ -856,25 +894,55 @@ const Author = () => {
                       
                       <div className="flex flex-col gap-2">
                         <label className="text-sm font-medium">Voice:</label>
-                        <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Choose a voice" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Male Voices</div>
-                            {VOICE_OPTIONS.filter(v => v.gender === "Male").map((voice) => (
-                              <SelectItem key={voice.id} value={voice.id}>
-                                {voice.name} - {voice.description}
-                              </SelectItem>
-                            ))}
-                            <div className="px-2 py-1 text-xs font-semibold text-muted-foreground mt-2">Female Voices</div>
-                            {VOICE_OPTIONS.filter(v => v.gender === "Female").map((voice) => (
-                              <SelectItem key={voice.id} value={voice.id}>
-                                {voice.name} - {voice.description}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        {useCustomVoice && customVoiceId ? (
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-10 px-3 py-2 bg-primary/10 border border-primary/30 rounded-md flex items-center gap-2">
+                              <Mic className="w-4 h-4 text-primary" />
+                              <span className="text-sm font-medium">{customVoiceName || "My Voice"}</span>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setUseCustomVoice(false)}
+                              className="text-xs"
+                            >
+                              Use Preset
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                              <SelectTrigger className="flex-1">
+                                <SelectValue placeholder="Choose a voice" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Male Voices</div>
+                                {VOICE_OPTIONS.filter(v => v.gender === "Male").map((voice) => (
+                                  <SelectItem key={voice.id} value={voice.id}>
+                                    {voice.name} - {voice.description}
+                                  </SelectItem>
+                                ))}
+                                <div className="px-2 py-1 text-xs font-semibold text-muted-foreground mt-2">Female Voices</div>
+                                {VOICE_OPTIONS.filter(v => v.gender === "Female").map((voice) => (
+                                  <SelectItem key={voice.id} value={voice.id}>
+                                    {voice.name} - {voice.description}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {customVoiceId && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setUseCustomVoice(true)}
+                                className="text-xs text-primary"
+                              >
+                                <Mic className="w-3 h-3 mr-1" />
+                                Use My Voice
+                              </Button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -993,6 +1061,15 @@ const Author = () => {
                     </Button>
                   </CardContent>
                 </Card>
+
+                {/* Voice Cloning - For Zulu Authors */}
+                {user && selectedLanguage === "isiZulu" && (
+                  <VoiceRecorder
+                    onVoiceCloned={handleVoiceCloned}
+                    existingVoiceId={customVoiceId}
+                    existingVoiceName={customVoiceName}
+                  />
+                )}
               </div>
             </TabsContent>
 
