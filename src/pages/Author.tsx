@@ -5,11 +5,19 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AudioPlayer from "@/components/AudioPlayer";
 import ChapterEditor, { Chapter, countWords, MINIMUM_WORD_COUNT } from "@/components/ChapterEditor";
 import VoiceRecorder from "@/components/VoiceRecorder";
+import ChapterRecorder from "@/components/ChapterRecorder";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -29,6 +37,7 @@ import {
   Plus,
   AlertCircle,
   Mic,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -81,6 +90,10 @@ const Author = () => {
   const [customVoiceId, setCustomVoiceId] = useState<string | null>(null);
   const [customVoiceName, setCustomVoiceName] = useState<string | null>(null);
   const [useCustomVoice, setUseCustomVoice] = useState(false);
+  const [showRecordModal, setShowRecordModal] = useState(false);
+  const [showVoiceCloningModal, setShowVoiceCloningModal] = useState(false);
+  const [recordingChapterTitle, setRecordingChapterTitle] = useState("");
+  const [recordingChapterContent, setRecordingChapterContent] = useState("");
 
   // Fetch user's custom voice from profile
   useEffect(() => {
@@ -750,28 +763,19 @@ const Author = () => {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {/* Input Method Tabs */}
-                    <Tabs defaultValue="upload" className="w-full">
-                      <TabsList className="grid w-full grid-cols-3 h-9">
-                        <TabsTrigger value="upload" className="text-xs">
-                          <Upload className="w-3 h-3 mr-1" />
-                          Upload
-                        </TabsTrigger>
-                        <TabsTrigger value="write" className="text-xs">
-                          <FileText className="w-3 h-3 mr-1" />
-                          Write
-                        </TabsTrigger>
-                        {selectedLanguage === "isiZulu" && user && (
-                          <TabsTrigger value="voice" className="text-xs">
-                            <Mic className="w-3 h-3 mr-1" />
-                            Voice Clone
-                          </TabsTrigger>
-                        )}
-                      </TabsList>
+                    {/* Add Content Section */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium">Add Chapters:</label>
+                        <Badge variant="outline" className="text-xs">
+                          Upload, Write, or Record
+                        </Badge>
+                      </div>
                       
-                      {/* Upload Tab */}
-                      <TabsContent value="upload" className="mt-4">
-                        <label className="border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary transition-colors cursor-pointer block">
+                      {/* Three methods in a unified row */}
+                      <div className="grid grid-cols-3 gap-3">
+                        {/* Upload File Button */}
+                        <label className="cursor-pointer">
                           <input
                             type="file"
                             accept=".txt,.pdf,.docx"
@@ -780,46 +784,77 @@ const Author = () => {
                             disabled={isUploading}
                             multiple
                           />
-                          <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                          <p className="font-medium text-sm mb-1">
-                            {isUploading ? "Processing files..." : "Drop documents here"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            PDF, DOCX, TXT • Multiple files
-                          </p>
-                          <Button variant="outline" size="sm" className="mt-3" type="button" asChild>
-                            <span>Browse Files</span>
-                          </Button>
+                          <div className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-primary hover:bg-muted/50 transition-all h-full flex flex-col items-center justify-center">
+                            {isUploading ? (
+                              <Clock className="w-6 h-6 text-muted-foreground animate-spin mb-2" />
+                            ) : (
+                              <Upload className="w-6 h-6 text-muted-foreground mb-2" />
+                            )}
+                            <p className="font-medium text-xs mb-0.5">
+                              {isUploading ? "Uploading..." : "Upload"}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              PDF, DOCX, TXT
+                            </p>
+                          </div>
                         </label>
-                      </TabsContent>
-                      
-                      {/* Write Tab */}
-                      <TabsContent value="write" className="mt-4">
-                        <Button
-                          variant="outline"
+
+                        {/* Write Chapter Button */}
+                        <button
+                          type="button"
                           onClick={handleAddEmptyChapter}
-                          className="w-full"
+                          className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-primary hover:bg-muted/50 transition-all h-full flex flex-col items-center justify-center"
                         >
-                          <Plus className="w-4 h-4 mr-2" />
-                          Add New Chapter
-                        </Button>
-                        <p className="text-xs text-muted-foreground text-center mt-2">
-                          Create chapters and write your content directly
-                        </p>
-                      </TabsContent>
-                      
-                      {/* Voice Clone Tab - Only for isiZulu */}
+                          <FileText className="w-6 h-6 text-muted-foreground mb-2" />
+                          <p className="font-medium text-xs mb-0.5">Write</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            Type directly
+                          </p>
+                        </button>
+
+                        {/* Record Chapter Button */}
+                        <button
+                          type="button"
+                          onClick={() => setShowRecordModal(true)}
+                          className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-primary hover:bg-muted/50 transition-all h-full flex flex-col items-center justify-center"
+                        >
+                          <Mic className="w-6 h-6 text-muted-foreground mb-2" />
+                          <p className="font-medium text-xs mb-0.5">Record</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            Voice chapter
+                          </p>
+                        </button>
+                      </div>
+
+                      {/* Voice Cloning Option for isiZulu */}
                       {selectedLanguage === "isiZulu" && user && (
-                        <TabsContent value="voice" className="mt-4">
-                          <VoiceRecorder
-                            onVoiceCloned={handleVoiceCloned}
-                            existingVoiceId={customVoiceId}
-                            existingVoiceName={customVoiceName}
-                            compact
-                          />
-                        </TabsContent>
+                        <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <Mic className="w-4 h-4 text-primary" />
+                              <span className="text-sm font-medium">Voice Cloning</span>
+                            </div>
+                            {customVoiceId && (
+                              <Badge variant="secondary" className="text-xs">
+                                <CheckCircle2 className="w-3 h-3 mr-1" />
+                                {customVoiceName || "Custom Voice"}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mb-2">
+                            Clone your voice for better Zulu narration quality
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowVoiceCloningModal(true)}
+                            className="w-full"
+                          >
+                            {customVoiceId ? "Update Voice Clone" : "Clone Your Voice"}
+                          </Button>
+                        </div>
                       )}
-                    </Tabs>
+                    </div>
 
                     {/* Add chapter buttons */}
                     {chapters.length > 0 && (
@@ -1290,6 +1325,59 @@ const Author = () => {
       </main>
 
       <Footer />
+
+      {/* Record Chapter Modal */}
+      <Dialog open={showRecordModal} onOpenChange={setShowRecordModal}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mic className="w-5 h-5 text-primary" />
+              Record New Chapter
+            </DialogTitle>
+            <DialogDescription>
+              Record your chapter audio and enter the text content for conversion.
+            </DialogDescription>
+          </DialogHeader>
+          <ChapterRecorder
+            chapterNumber={chapters.length + 1}
+            onChapterAdded={(title, content, audioBlob) => {
+              const newChapter: Chapter = {
+                id: crypto.randomUUID(),
+                title,
+                content,
+                wordCount: countWords(content),
+                chapterNumber: chapters.length + 1,
+              };
+              setChapters(prev => [...prev, newChapter]);
+              setHasUnsavedChanges(true);
+            }}
+            onClose={() => setShowRecordModal(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Voice Cloning Modal */}
+      <Dialog open={showVoiceCloningModal} onOpenChange={setShowVoiceCloningModal}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mic className="w-5 h-5 text-primary" />
+              Clone Your Voice
+            </DialogTitle>
+            <DialogDescription>
+              Record or upload a voice sample to create your custom voice for isiZulu narration.
+            </DialogDescription>
+          </DialogHeader>
+          <VoiceRecorder
+            onVoiceCloned={(voiceId, voiceName) => {
+              handleVoiceCloned(voiceId, voiceName);
+              setShowVoiceCloningModal(false);
+            }}
+            existingVoiceId={customVoiceId}
+            existingVoiceName={customVoiceName}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
