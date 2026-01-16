@@ -750,39 +750,89 @@ const Author = () => {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <label className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary transition-colors cursor-pointer block">
-                      <input
-                        type="file"
-                        accept=".txt,.pdf,.docx"
-                        onChange={handleFileUpload}
-                        className="hidden"
-                        disabled={isUploading}
-                        multiple
-                      />
-                      <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                      <p className="font-medium mb-1">
-                        {isUploading ? "Processing files..." : "Drop your documents here"}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Supports PDF, DOCX, TXT • Select multiple files
-                      </p>
-                      <Button variant="outline" size="sm" className="mt-4" type="button" asChild>
-                        <span>Browse Files</span>
-                      </Button>
-                    </label>
+                    {/* Input Method Tabs */}
+                    <Tabs defaultValue="upload" className="w-full">
+                      <TabsList className="grid w-full grid-cols-3 h-9">
+                        <TabsTrigger value="upload" className="text-xs">
+                          <Upload className="w-3 h-3 mr-1" />
+                          Upload
+                        </TabsTrigger>
+                        <TabsTrigger value="write" className="text-xs">
+                          <FileText className="w-3 h-3 mr-1" />
+                          Write
+                        </TabsTrigger>
+                        {selectedLanguage === "isiZulu" && user && (
+                          <TabsTrigger value="voice" className="text-xs">
+                            <Mic className="w-3 h-3 mr-1" />
+                            Voice Clone
+                          </TabsTrigger>
+                        )}
+                      </TabsList>
+                      
+                      {/* Upload Tab */}
+                      <TabsContent value="upload" className="mt-4">
+                        <label className="border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary transition-colors cursor-pointer block">
+                          <input
+                            type="file"
+                            accept=".txt,.pdf,.docx"
+                            onChange={handleFileUpload}
+                            className="hidden"
+                            disabled={isUploading}
+                            multiple
+                          />
+                          <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                          <p className="font-medium text-sm mb-1">
+                            {isUploading ? "Processing files..." : "Drop documents here"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            PDF, DOCX, TXT • Multiple files
+                          </p>
+                          <Button variant="outline" size="sm" className="mt-3" type="button" asChild>
+                            <span>Browse Files</span>
+                          </Button>
+                        </label>
+                      </TabsContent>
+                      
+                      {/* Write Tab */}
+                      <TabsContent value="write" className="mt-4">
+                        <Button
+                          variant="outline"
+                          onClick={handleAddEmptyChapter}
+                          className="w-full"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add New Chapter
+                        </Button>
+                        <p className="text-xs text-muted-foreground text-center mt-2">
+                          Create chapters and write your content directly
+                        </p>
+                      </TabsContent>
+                      
+                      {/* Voice Clone Tab - Only for isiZulu */}
+                      {selectedLanguage === "isiZulu" && user && (
+                        <TabsContent value="voice" className="mt-4">
+                          <VoiceRecorder
+                            onVoiceCloned={handleVoiceCloned}
+                            existingVoiceId={customVoiceId}
+                            existingVoiceName={customVoiceName}
+                            compact
+                          />
+                        </TabsContent>
+                      )}
+                    </Tabs>
 
                     {/* Add chapter buttons */}
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleAddEmptyChapter}
-                        className="flex-1"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add Empty Chapter
-                      </Button>
-                      {chapters.length > 0 && (
+                    {chapters.length > 0 && (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleAddEmptyChapter}
+                          className="flex-1"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Chapter
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -791,8 +841,8 @@ const Author = () => {
                         >
                           Clear All
                         </Button>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {/* Chapter Editor */}
                     <ChapterEditor
@@ -1062,14 +1112,6 @@ const Author = () => {
                   </CardContent>
                 </Card>
 
-                {/* Voice Cloning - For Zulu Authors */}
-                {user && selectedLanguage === "isiZulu" && (
-                  <VoiceRecorder
-                    onVoiceCloned={handleVoiceCloned}
-                    existingVoiceId={customVoiceId}
-                    existingVoiceName={customVoiceName}
-                  />
-                )}
               </div>
             </TabsContent>
 
