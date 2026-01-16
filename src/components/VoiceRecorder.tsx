@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Slider } from "@/components/ui/slider";
 import { Mic, Square, Play, Pause, Upload, Trash2, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -12,12 +12,14 @@ interface VoiceRecorderProps {
   onVoiceCloned: (voiceId: string, voiceName: string) => void;
   existingVoiceId?: string | null;
   existingVoiceName?: string | null;
+  compact?: boolean;
 }
 
 export default function VoiceRecorder({ 
   onVoiceCloned, 
   existingVoiceId,
-  existingVoiceName 
+  existingVoiceName,
+  compact = false
 }: VoiceRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
@@ -27,19 +29,41 @@ export default function VoiceRecorder({
   const [voiceName, setVoiceName] = useState("");
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [playbackTime, setPlaybackTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const MIN_DURATION = 30; // Minimum 30 seconds recommended
-  const MAX_DURATION = 180; // Maximum 3 minutes
+  const MIN_DURATION = 30;
+  const MAX_DURATION = 180;
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+    };
+  }, [recordedUrl]);
+
+  // Audio playback tracking
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleTimeUpdate = () => setPlaybackTime(audio.currentTime);
+    const handleLoadedMetadata = () => setAudioDuration(audio.duration);
+    const handleEnded = () => setIsPlaying(false);
+
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('ended', handleEnded);
+
+    return () => {
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('ended', handleEnded);
     };
   }, [recordedUrl]);
 
@@ -103,15 +127,22 @@ export default function VoiceRecorder({
     }
   };
 
-  const playRecording = () => {
-    if (recordedUrl && audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.pause();
-        setIsPlaying(false);
-      } else {
-        audioRef.current.play();
-        setIsPlaying(true);
-      }
+  const togglePlayback = () => {
+    if (!audioRef.current || !recordedUrl) return;
+    
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play();
+      setIsPlaying(true);
+    }
+  };
+
+  const handleSeek = (value: number[]) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = value[0];
+      setPlaybackTime(value[0]);
     }
   };
 
@@ -134,7 +165,8 @@ export default function VoiceRecorder({
     setRecordedBlob(null);
     if (recordedUrl) URL.revokeObjectURL(recordedUrl);
     setRecordedUrl(URL.createObjectURL(file));
-    toast.success(`File "${file.name}" ready for upload`);
+    setPlaybackTime(0);
+    toast.success(`File "${file.name}" ready`);
   };
 
   const clearRecording = () => {
@@ -143,6 +175,8 @@ export default function VoiceRecorder({
     if (recordedUrl) URL.revokeObjectURL(recordedUrl);
     setRecordedUrl(null);
     setRecordingDuration(0);
+    setPlaybackTime(0);
+    setAudioDuration(0);
   };
 
   const handleCloneVoice = async () => {
@@ -166,7 +200,6 @@ export default function VoiceRecorder({
     try {
       const formData = new FormData();
       
-      // Convert webm to proper format if needed
       if (uploadedFile) {
         formData.append("audio", uploadedFile, uploadedFile.name);
       } else if (recordedBlob) {
@@ -207,176 +240,194 @@ export default function VoiceRecorder({
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
   const progressPercent = Math.min((recordingDuration / MIN_DURATION) * 100, 100);
 
   return (
-    <Card className="border-primary/20">
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Mic className="w-5 h-5 text-primary" />
-            Clone Your Voice
-          </CardTitle>
-          {existingVoiceId && (
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" />
-              {existingVoiceName || "Custom Voice"}
-            </Badge>
-          )}
+    <div className="space-y-4">
+      {/* Header with existing voice badge */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Mic className="w-4 h-4 text-primary" />
+          <span className="text-sm font-medium">Clone Your Voice</span>
         </div>
-        <p className="text-sm text-muted-foreground mt-1">
-          Record your voice reading Zulu text for authentic pronunciation
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Voice Name Input */}
-        <div className="space-y-2">
-          <Label htmlFor="voiceName">Voice Name</Label>
-          <Input
-            id="voiceName"
-            placeholder="e.g., My Zulu Voice"
-            value={voiceName}
-            onChange={(e) => setVoiceName(e.target.value)}
+        {existingVoiceId && (
+          <Badge variant="secondary" className="flex items-center gap-1 text-xs">
+            <CheckCircle2 className="w-3 h-3" />
+            {existingVoiceName || "Custom Voice"}
+          </Badge>
+        )}
+      </div>
+
+      {/* Voice Name Input */}
+      <div className="space-y-1.5">
+        <Label htmlFor="voiceName" className="text-xs">Voice Name</Label>
+        <Input
+          id="voiceName"
+          placeholder="e.g., My Zulu Voice"
+          value={voiceName}
+          onChange={(e) => setVoiceName(e.target.value)}
+          disabled={isRecording || isUploading}
+          className="h-9"
+        />
+      </div>
+
+      {/* Recording Controls */}
+      <div className="flex items-center gap-2">
+        {!isRecording ? (
+          <Button
+            onClick={startRecording}
+            disabled={isUploading}
+            size="sm"
+            className="flex-1"
+          >
+            <Mic className="w-4 h-4 mr-2" />
+            Record
+          </Button>
+        ) : (
+          <Button
+            onClick={stopRecording}
+            variant="destructive"
+            size="sm"
+            className="flex-1"
+          >
+            <Square className="w-4 h-4 mr-2" />
+            Stop
+          </Button>
+        )}
+
+        <span className="text-xs text-muted-foreground">or</span>
+
+        <label className="flex-1">
+          <input
+            type="file"
+            accept="audio/*,.mp3,.wav,.webm,.m4a"
+            onChange={handleFileUpload}
+            className="hidden"
             disabled={isRecording || isUploading}
           />
-        </div>
-
-        {/* Recording Controls */}
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-2">
-            {!isRecording ? (
-              <Button
-                onClick={startRecording}
-                disabled={isUploading}
-                variant="default"
-                className="flex-1"
-              >
-                <Mic className="w-4 h-4 mr-2" />
-                Start Recording
-              </Button>
-            ) : (
-              <Button
-                onClick={stopRecording}
-                variant="destructive"
-                className="flex-1"
-              >
-                <Square className="w-4 h-4 mr-2" />
-                Stop Recording
-              </Button>
-            )}
-
-            <span className="text-sm text-muted-foreground">or</span>
-
-            <label className="flex-1">
-              <input
-                type="file"
-                accept="audio/*,.mp3,.wav,.webm,.m4a"
-                onChange={handleFileUpload}
-                className="hidden"
-                disabled={isRecording || isUploading}
-              />
-              <Button
-                variant="outline"
-                className="w-full"
-                asChild
-                disabled={isRecording || isUploading}
-              >
-                <span>
-                  <Upload className="w-4 h-4 mr-2" />
-                  Upload Audio
-                </span>
-              </Button>
-            </label>
-          </div>
-
-          {/* Recording Progress */}
-          {isRecording && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                  Recording...
-                </span>
-                <span className="font-mono">{formatTime(recordingDuration)}</span>
-              </div>
-              <Progress value={progressPercent} className="h-2" />
-              <p className="text-xs text-muted-foreground">
-                {recordingDuration < MIN_DURATION
-                  ? `Record at least ${MIN_DURATION} seconds for best quality`
-                  : "Good recording length!"}
-              </p>
-            </div>
-          )}
-
-          {/* Recorded/Uploaded Audio Preview */}
-          {recordedUrl && !isRecording && (
-            <div className="p-3 bg-muted/50 rounded-lg space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">
-                  {uploadedFile ? uploadedFile.name : `Recording (${formatTime(recordingDuration)})`}
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button size="sm" variant="ghost" onClick={playRecording}>
-                    {isPlaying ? (
-                      <Pause className="w-4 h-4" />
-                    ) : (
-                      <Play className="w-4 h-4" />
-                    )}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={clearRecording}>
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
-                </div>
-              </div>
-              <audio
-                ref={audioRef}
-                src={recordedUrl}
-                onEnded={() => setIsPlaying(false)}
-                className="hidden"
-              />
-            </div>
-          )}
-
-          {/* Tips */}
-          <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
-            <div className="flex gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-              <div className="text-xs text-amber-700 dark:text-amber-300 space-y-1">
-                <p><strong>Recording Tips for Best Quality:</strong></p>
-                <ul className="list-disc list-inside space-y-0.5">
-                  <li>Record in a quiet environment</li>
-                  <li>Speak clearly at a natural pace</li>
-                  <li>Read a sample of Zulu text (30-60 seconds)</li>
-                  <li>Keep consistent distance from microphone</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          {/* Clone Button */}
           <Button
-            onClick={handleCloneVoice}
-            disabled={(!recordedBlob && !uploadedFile) || !voiceName.trim() || isUploading || isRecording}
+            variant="outline"
+            size="sm"
             className="w-full"
+            asChild
+            disabled={isRecording || isUploading}
           >
-            {isUploading ? (
-              <>
-                <span className="w-4 h-4 mr-2 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                Cloning Voice...
-              </>
-            ) : (
-              <>
-                <Mic className="w-4 h-4 mr-2" />
-                Clone My Voice
-              </>
-            )}
+            <span>
+              <Upload className="w-4 h-4 mr-2" />
+              Upload
+            </span>
           </Button>
+        </label>
+      </div>
+
+      {/* Recording Progress */}
+      {isRecording && (
+        <div className="space-y-2 p-3 bg-destructive/10 rounded-lg border border-destructive/20">
+          <div className="flex items-center justify-between text-sm">
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 bg-destructive rounded-full animate-pulse" />
+              Recording...
+            </span>
+            <span className="font-mono text-xs">{formatTime(recordingDuration)}</span>
+          </div>
+          <Progress value={progressPercent} className="h-1.5" />
+          <p className="text-xs text-muted-foreground">
+            {recordingDuration < MIN_DURATION
+              ? `${MIN_DURATION - recordingDuration}s more for best quality`
+              : "✓ Good recording length!"}
+          </p>
         </div>
-      </CardContent>
-    </Card>
+      )}
+
+      {/* Audio Player with Controls */}
+      {recordedUrl && !isRecording && (
+        <div className="p-3 bg-muted/50 rounded-lg space-y-3 border">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium truncate flex-1 mr-2">
+              {uploadedFile ? uploadedFile.name : `Recording (${formatTime(recordingDuration)})`}
+            </span>
+            <Button size="icon" variant="ghost" onClick={clearRecording} className="h-7 w-7">
+              <Trash2 className="w-4 h-4 text-destructive" />
+            </Button>
+          </div>
+          
+          {/* Playback Controls */}
+          <div className="flex items-center gap-3">
+            <Button 
+              size="icon" 
+              variant="outline" 
+              onClick={togglePlayback}
+              className="h-9 w-9 shrink-0"
+            >
+              {isPlaying ? (
+                <Pause className="w-4 h-4" />
+              ) : (
+                <Play className="w-4 h-4" />
+              )}
+            </Button>
+            
+            <div className="flex-1 space-y-1">
+              <Slider
+                value={[playbackTime]}
+                max={audioDuration || 1}
+                step={0.1}
+                onValueChange={handleSeek}
+                className="cursor-pointer"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground font-mono">
+                <span>{formatTime(playbackTime)}</span>
+                <span>{formatTime(audioDuration)}</span>
+              </div>
+            </div>
+          </div>
+          
+          <audio
+            ref={audioRef}
+            src={recordedUrl}
+            className="hidden"
+          />
+        </div>
+      )}
+
+      {/* Tips - Collapsible for compact mode */}
+      {!compact && (
+        <div className="p-2.5 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+          <div className="flex gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-xs text-amber-700 dark:text-amber-300 space-y-0.5">
+              <p className="font-medium">Tips for best quality:</p>
+              <ul className="list-disc list-inside opacity-90">
+                <li>Quiet environment, natural pace</li>
+                <li>30-60 seconds of Zulu text</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clone Button */}
+      <Button
+        onClick={handleCloneVoice}
+        disabled={(!recordedBlob && !uploadedFile) || !voiceName.trim() || isUploading || isRecording}
+        className="w-full"
+        size="sm"
+      >
+        {isUploading ? (
+          <>
+            <span className="w-4 h-4 mr-2 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            Cloning Voice...
+          </>
+        ) : (
+          <>
+            <Mic className="w-4 h-4 mr-2" />
+            Clone My Voice
+          </>
+        )}
+      </Button>
+    </div>
   );
 }
