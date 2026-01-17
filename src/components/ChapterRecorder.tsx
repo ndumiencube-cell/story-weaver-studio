@@ -7,7 +7,7 @@ import { Mic, Square, Play, Pause, Trash2, Save, Upload, Music } from "lucide-re
 import { toast } from "sonner";
 
 interface ChapterRecorderProps {
-  onChapterAdded: (title: string, audioBlob: Blob) => void;
+  onChapterAdded: (title: string, audioBlob: Blob, duration: number) => void;
   onClose: () => void;
   chapterNumber: number;
   mode: "record" | "upload";
@@ -63,26 +63,54 @@ export default function ChapterRecorder({
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { 
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 44100,
-        } 
-      });
+      console.log("Requesting microphone access...");
       
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      // Try with standard constraints first, then fall back to basic audio if that fails
+      let stream;
+      try {
+        console.log("Attempting with advanced audio constraints...");
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: { 
+            echoCancellation: true,
+            noiseSuppression: true,
+            sampleRate: 44100,
+          } 
+        });
+        console.log("✅ Got stream with advanced constraints");
+      } catch (constraintError) {
+        // Fall back to basic audio constraint if advanced constraints fail
+        console.warn("Advanced constraints failed, falling back to basic audio:", constraintError);
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log("✅ Got stream with basic audio constraint");
+      }
+      
+      console.log("Stream active:", stream.active);
+      console.log("Audio tracks:", stream.getAudioTracks().length);
+      
+      // Try different mime types for MediaRecorder
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") 
+        ? "audio/webm" 
+        : MediaRecorder.isTypeSupported("audio/mp4")
+        ? "audio/mp4"
+        : "";
+      
+      console.log("Using mime type:", mimeType);
+      
+      const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
       mediaRecorder.ondataavailable = (e) => {
+        console.log("Data available, size:", e.data.size);
         if (e.data.size > 0) {
           chunksRef.current.push(e.data);
         }
       };
 
       mediaRecorder.onstop = () => {
+        console.log("Recording stopped, chunks:", chunksRef.current.length);
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        console.log("Blob created, size:", blob.size);
         setAudioBlob(blob);
         const url = URL.createObjectURL(blob);
         setAudioUrl(url);
@@ -90,6 +118,7 @@ export default function ChapterRecorder({
       };
 
       mediaRecorder.start(1000);
+      console.log("✅ Recording started");
       setIsRecording(true);
       setRecordingDuration(0);
       
@@ -99,8 +128,29 @@ export default function ChapterRecorder({
 
       toast.info("Recording started. Read your chapter clearly.");
     } catch (error) {
-      console.error("Failed to start recording:", error);
-      toast.error("Failed to access microphone. Please check permissions.");
+      console.error("❌ Failed to start recording:", error);
+      console.error("Error name:", error instanceof DOMException ? error.name : "Not a DOMException");
+      console.error("Error message:", error instanceof Error ? error.message : String(error));
+      
+      let errorMessage = "Microphone access failed. ";
+      
+      if (error instanceof DOMException) {
+        if (error.name === "NotAllowedError") {
+          errorMessage += "Permission was denied. To fix: Look for a microphone icon in your address bar and click 'Allow', or check your browser settings (Settings > Privacy > Microphone > Allow this site).";
+        } else if (error.name === "NotFoundError") {
+          errorMessage += "No microphone found on this device.";
+        } else if (error.name === "SecurityError") {
+          errorMessage += "Microphone blocked by browser security. Make sure you're using HTTPS or localhost.";
+        } else if (error.name === "NotReadableError") {
+          errorMessage += "Microphone is in use by another application. Close other apps using your mic and try again.";
+        } else {
+          errorMessage += error.message;
+        }
+      } else {
+        errorMessage += "An unknown error occurred.";
+      }
+      
+      toast.error(errorMessage);
     }
   };
 
@@ -191,7 +241,7 @@ export default function ChapterRecorder({
       return;
     }
 
-    onChapterAdded(chapterTitle, audioBlob);
+    onChapterAdded(chapterTitle, audioBlob, audioDuration);
     toast.success("Audio chapter added!");
     onClose();
   };
@@ -239,6 +289,18 @@ export default function ChapterRecorder({
                 </Button>
               )}
             </div>
+
+            {/* Permission Note */}
+            {!isRecording && !audioUrl && (
+              <div className="text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950 p-3 rounded space-y-2">
+                <p>💡 <strong>Microphone permission needed:</strong></p>
+                <ul className="list-disc list-inside space-y-1 ml-1">
+                  <li>Your browser will ask for microphone access - click <strong>Allow</strong></li>
+                  <li>On macOS: Also check System Settings &gt; Privacy &amp; Security &gt; Microphone to allow your browser</li>
+                  <li>If you previously denied permission, go to browser Settings &gt; Privacy &gt; Microphone and remove the block</li>
+                </ul>
+              </div>
+            )}
 
             {/* Recording Progress */}
             {isRecording && (
