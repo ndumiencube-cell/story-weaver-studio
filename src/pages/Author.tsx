@@ -121,7 +121,14 @@ const Author = () => {
 
   const totalWordCount = chapters.reduce((sum, ch) => sum + ch.wordCount, 0);
   const totalCharCount = combinedScriptText.length;
-  const allChaptersMeetMinimum = chapters.every(ch => ch.wordCount >= MINIMUM_WORD_COUNT);
+  
+  // Check if all chapters are audio-only (no text conversion needed)
+  const hasOnlyAudioChapters = chapters.length > 0 && chapters.every(ch => (ch as AudioChapter).isAudioChapter);
+  const hasAnyAudioChapters = chapters.some(ch => (ch as AudioChapter).isAudioChapter);
+  const textChapters = chapters.filter(ch => !(ch as AudioChapter).isAudioChapter);
+  
+  // Only text chapters need to meet minimum word count
+  const allChaptersMeetMinimum = textChapters.every(ch => ch.wordCount >= MINIMUM_WORD_COUNT);
 
   // Save draft to database
   const handleSaveDraft = async () => {
@@ -540,13 +547,26 @@ const Author = () => {
       return;
     }
 
-    if (!allChaptersMeetMinimum) {
-      toast.error(`Each chapter must have at least ${MINIMUM_WORD_COUNT} words`);
+    // If all chapters are audio, no conversion needed - just proceed to save
+    if (hasOnlyAudioChapters) {
+      toast.info("All chapters are already audio. You can save directly to your library.");
       return;
     }
 
-    if (combinedScriptText.length > 5000) {
-      toast.error("Total content is too long. Maximum 5000 characters for demo.");
+    // Only validate text chapters
+    if (textChapters.length > 0 && !allChaptersMeetMinimum) {
+      toast.error(`Each text chapter must have at least ${MINIMUM_WORD_COUNT} words`);
+      return;
+    }
+
+    // Only count text content
+    const textContent = textChapters
+      .sort((a, b) => a.chapterNumber - b.chapterNumber)
+      .map(ch => `--- Chapter ${ch.chapterNumber}: ${ch.title} ---\n\n${ch.content}`)
+      .join("\n\n");
+
+    if (textContent.length > 5000) {
+      toast.error("Total text content is too long. Maximum 5000 characters for demo.");
       return;
     }
 
@@ -563,7 +583,7 @@ const Author = () => {
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
           body: JSON.stringify({ 
-            text: combinedScriptText, 
+            text: textContent, 
             voice: selectedVoice, 
             language: selectedLanguage,
           }),
@@ -867,17 +887,26 @@ const Author = () => {
                           <span className="text-muted-foreground">
                             {chapters.length} chapter(s)
                           </span>
-                          <span className="text-muted-foreground">
-                            {totalWordCount.toLocaleString()} words
-                          </span>
-                          <span className="text-muted-foreground">
-                            {totalCharCount.toLocaleString()}/5000 chars
-                          </span>
+                          {hasAnyAudioChapters && (
+                            <span className="text-muted-foreground">
+                              {chapters.filter(ch => (ch as AudioChapter).isAudioChapter).length} audio
+                            </span>
+                          )}
+                          {textChapters.length > 0 && (
+                            <>
+                              <span className="text-muted-foreground">
+                                {totalWordCount.toLocaleString()} words
+                              </span>
+                              <span className="text-muted-foreground">
+                                {totalCharCount.toLocaleString()}/5000 chars
+                              </span>
+                            </>
+                          )}
                         </div>
-                        {!allChaptersMeetMinimum && (
+                        {textChapters.length > 0 && !allChaptersMeetMinimum && (
                           <div className="flex items-center gap-1 text-destructive text-xs">
                             <AlertCircle className="w-3 h-3" />
-                            Some chapters need more words
+                            Some text chapters need more words
                           </div>
                         )}
                       </div>
@@ -933,65 +962,81 @@ const Author = () => {
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="flex flex-col gap-2">
-                        <label className="text-sm font-medium">Language:</label>
-                        <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Choose language" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {LANGUAGE_OPTIONS.map((lang) => (
-                              <SelectItem key={lang.id} value={lang.id}>
-                                {lang.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                    {/* Only show language/voice options if there are text chapters to convert */}
+                    {!hasOnlyAudioChapters && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex flex-col gap-2">
+                          <label className="text-sm font-medium">Language:</label>
+                          <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Choose language" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {LANGUAGE_OPTIONS.map((lang) => (
+                                <SelectItem key={lang.id} value={lang.id}>
+                                  {lang.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        <div className="flex flex-col gap-2">
+                          <label className="text-sm font-medium">Voice:</label>
+                          <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Choose a voice" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Male Voices</div>
+                              {VOICE_OPTIONS.filter(v => v.gender === "Male").map((voice) => (
+                                <SelectItem key={voice.id} value={voice.id}>
+                                  {voice.name} - {voice.description}
+                                </SelectItem>
+                              ))}
+                              <div className="px-2 py-1 text-xs font-semibold text-muted-foreground mt-2">Female Voices</div>
+                              {VOICE_OPTIONS.filter(v => v.gender === "Female").map((voice) => (
+                                <SelectItem key={voice.id} value={voice.id}>
+                                  {voice.name} - {voice.description}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
-                      
-                      <div className="flex flex-col gap-2">
-                        <label className="text-sm font-medium">Voice:</label>
-                        <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Choose a voice" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Male Voices</div>
-                            {VOICE_OPTIONS.filter(v => v.gender === "Male").map((voice) => (
-                              <SelectItem key={voice.id} value={voice.id}>
-                                {voice.name} - {voice.description}
-                              </SelectItem>
-                            ))}
-                            <div className="px-2 py-1 text-xs font-semibold text-muted-foreground mt-2">Female Voices</div>
-                            {VOICE_OPTIONS.filter(v => v.gender === "Female").map((voice) => (
-                              <SelectItem key={voice.id} value={voice.id}>
-                                {voice.name} - {voice.description}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
+                    )}
 
-                    <Button
-                      variant="hero"
-                      className="w-full"
-                      onClick={handleConvertToAudio}
-                      disabled={isConverting}
-                    >
-                      {isConverting ? (
-                        <>
-                          <Clock className="w-4 h-4 mr-2 animate-spin" />
-                          Converting...
-                        </>
-                      ) : (
-                        <>
-                          <Mic2 className="w-4 h-4 mr-2" />
-                          Convert to Audiobook
-                        </>
-                      )}
-                    </Button>
+                    {/* Only show convert button if there are text chapters to convert */}
+                    {!hasOnlyAudioChapters && (
+                      <Button
+                        variant="hero"
+                        className="w-full"
+                        onClick={handleConvertToAudio}
+                        disabled={isConverting || textChapters.length === 0}
+                      >
+                        {isConverting ? (
+                          <>
+                            <Clock className="w-4 h-4 mr-2 animate-spin" />
+                            Converting...
+                          </>
+                        ) : (
+                          <>
+                            <Mic2 className="w-4 h-4 mr-2" />
+                            Convert Text to Audio
+                          </>
+                        )}
+                      </Button>
+                    )}
+
+                    {/* For audio-only books, show message */}
+                    {hasOnlyAudioChapters && chapters.length > 0 && (
+                      <div className="p-4 bg-muted/50 rounded-lg text-center">
+                        <CheckCircle2 className="w-6 h-6 text-green-600 mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground">
+                          Your audio chapters are ready! Save to your library when finished.
+                        </p>
+                      </div>
+                    )}
 
                     {generatedAudio && (
                       <div className="space-y-3">
