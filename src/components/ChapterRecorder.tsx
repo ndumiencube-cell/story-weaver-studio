@@ -2,49 +2,44 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Slider } from "@/components/ui/slider";
-import { Mic, Square, Play, Pause, Trash2, CheckCircle2, AlertCircle, Save } from "lucide-react";
+import { Mic, Square, Play, Pause, Trash2, Save, Upload, Music } from "lucide-react";
 import { toast } from "sonner";
-import { countWords, MINIMUM_WORD_COUNT } from "./ChapterEditor";
 
 interface ChapterRecorderProps {
-  onChapterAdded: (title: string, content: string, audioBlob?: Blob) => void;
+  onChapterAdded: (title: string, audioBlob: Blob) => void;
   onClose: () => void;
   chapterNumber: number;
+  mode: "record" | "upload";
 }
 
 export default function ChapterRecorder({ 
   onChapterAdded, 
   onClose,
-  chapterNumber
+  chapterNumber,
+  mode
 }: ChapterRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
-  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
-  const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [chapterTitle, setChapterTitle] = useState(`Chapter ${chapterNumber}`);
-  const [transcribedText, setTranscribedText] = useState("");
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [playbackTime, setPlaybackTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
-  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const MIN_WORD_COUNT = MINIMUM_WORD_COUNT;
-
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
     };
-  }, [recordedUrl]);
+  }, [audioUrl]);
 
   // Audio playback tracking
   useEffect(() => {
@@ -64,7 +59,7 @@ export default function ChapterRecorder({
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [recordedUrl]);
+  }, [audioUrl]);
 
   const startRecording = async () => {
     try {
@@ -88,9 +83,9 @@ export default function ChapterRecorder({
 
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        setRecordedBlob(blob);
+        setAudioBlob(blob);
         const url = URL.createObjectURL(blob);
-        setRecordedUrl(url);
+        setAudioUrl(url);
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -102,7 +97,7 @@ export default function ChapterRecorder({
         setRecordingDuration(prev => prev + 1);
       }, 1000);
 
-      toast.info("Recording started. Read your chapter content clearly.");
+      toast.info("Recording started. Read your chapter clearly.");
     } catch (error) {
       console.error("Failed to start recording:", error);
       toast.error("Failed to access microphone. Please check permissions.");
@@ -120,8 +115,38 @@ export default function ChapterRecorder({
     }
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ["audio/mp3", "audio/mpeg", "audio/wav", "audio/webm", "audio/m4a", "audio/x-m4a"];
+    if (!validTypes.includes(file.type) && !file.name.match(/\.(mp3|wav|webm|m4a)$/i)) {
+      toast.error("Please upload an MP3, WAV, WebM, or M4A file");
+      return;
+    }
+
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error("File too large. Maximum size is 100MB.");
+      return;
+    }
+
+    setAudioBlob(file);
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioUrl(URL.createObjectURL(file));
+    setUploadedFileName(file.name);
+    setPlaybackTime(0);
+    
+    // Use filename as chapter title if not already set
+    const nameWithoutExt = file.name.replace(/\.(mp3|wav|webm|m4a)$/i, "");
+    if (chapterTitle === `Chapter ${chapterNumber}`) {
+      setChapterTitle(nameWithoutExt);
+    }
+    
+    toast.success(`Audio file "${file.name}" ready`);
+  };
+
   const togglePlayback = () => {
-    if (!audioRef.current || !recordedUrl) return;
+    if (!audioRef.current || !audioUrl) return;
     
     if (isPlaying) {
       audioRef.current.pause();
@@ -139,13 +164,14 @@ export default function ChapterRecorder({
     }
   };
 
-  const clearRecording = () => {
-    setRecordedBlob(null);
-    if (recordedUrl) URL.revokeObjectURL(recordedUrl);
-    setRecordedUrl(null);
+  const clearAudio = () => {
+    setAudioBlob(null);
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioUrl(null);
     setRecordingDuration(0);
     setPlaybackTime(0);
     setAudioDuration(0);
+    setUploadedFileName(null);
   };
 
   const formatTime = (seconds: number) => {
@@ -160,24 +186,15 @@ export default function ChapterRecorder({
       return;
     }
 
-    if (!transcribedText.trim() && !recordedBlob) {
-      toast.error("Please record audio or enter chapter content");
+    if (!audioBlob) {
+      toast.error(mode === "record" ? "Please record audio first" : "Please upload an audio file first");
       return;
     }
 
-    const wordCount = countWords(transcribedText);
-    if (transcribedText.trim() && wordCount < MIN_WORD_COUNT) {
-      toast.error(`Chapter needs at least ${MIN_WORD_COUNT} words (currently ${wordCount})`);
-      return;
-    }
-
-    onChapterAdded(chapterTitle, transcribedText, recordedBlob || undefined);
-    toast.success("Chapter added successfully!");
+    onChapterAdded(chapterTitle, audioBlob);
+    toast.success("Audio chapter added!");
     onClose();
   };
-
-  const wordCount = countWords(transcribedText);
-  const meetsMinimum = wordCount >= MIN_WORD_COUNT;
 
   return (
     <div className="space-y-4">
@@ -193,54 +210,80 @@ export default function ChapterRecorder({
         />
       </div>
 
-      {/* Recording Section */}
+      {/* Recording or Upload Section */}
       <div className="space-y-3">
-        <Label className="text-sm font-medium">Record Chapter Audio</Label>
+        <Label className="text-sm font-medium">
+          {mode === "record" ? "Record Chapter Audio" : "Upload Audio File"}
+        </Label>
         
-        {/* Recording Controls */}
-        <div className="flex items-center gap-3">
-          {!isRecording ? (
-            <Button
-              onClick={startRecording}
-              disabled={isTranscribing}
-              className="flex-1"
-            >
-              <Mic className="w-4 h-4 mr-2" />
-              Start Recording
-            </Button>
-          ) : (
-            <Button
-              onClick={stopRecording}
-              variant="destructive"
-              className="flex-1"
-            >
-              <Square className="w-4 h-4 mr-2" />
-              Stop Recording
-            </Button>
-          )}
-        </div>
-
-        {/* Recording Progress */}
-        {isRecording && (
-          <div className="p-3 bg-destructive/10 rounded-lg border border-destructive/20">
-            <div className="flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-destructive rounded-full animate-pulse" />
-                Recording...
-              </span>
-              <span className="font-mono text-sm">{formatTime(recordingDuration)}</span>
+        {mode === "record" ? (
+          <>
+            {/* Recording Controls */}
+            <div className="flex items-center gap-3">
+              {!isRecording ? (
+                <Button
+                  onClick={startRecording}
+                  className="flex-1"
+                >
+                  <Mic className="w-4 h-4 mr-2" />
+                  Start Recording
+                </Button>
+              ) : (
+                <Button
+                  onClick={stopRecording}
+                  variant="destructive"
+                  className="flex-1"
+                >
+                  <Square className="w-4 h-4 mr-2" />
+                  Stop Recording
+                </Button>
+              )}
             </div>
-          </div>
+
+            {/* Recording Progress */}
+            {isRecording && (
+              <div className="p-3 bg-destructive/10 rounded-lg border border-destructive/20">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 bg-destructive rounded-full animate-pulse" />
+                    Recording...
+                  </span>
+                  <span className="font-mono text-sm">{formatTime(recordingDuration)}</span>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Upload Controls */}
+            <label className="cursor-pointer block">
+              <input
+                type="file"
+                accept="audio/*,.mp3,.wav,.webm,.m4a"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary hover:bg-muted/50 transition-all">
+                <Music className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                <p className="font-medium text-sm mb-1">
+                  Click to upload audio file
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  MP3, WAV, WebM, M4A (max 100MB)
+                </p>
+              </div>
+            </label>
+          </>
         )}
 
         {/* Audio Player */}
-        {recordedUrl && !isRecording && (
+        {audioUrl && !isRecording && (
           <div className="p-3 bg-muted/50 rounded-lg space-y-3 border">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">
-                Recording ({formatTime(recordingDuration)})
+              <span className="text-sm font-medium truncate flex-1 mr-2">
+                {uploadedFileName || `Recording (${formatTime(recordingDuration)})`}
               </span>
-              <Button size="icon" variant="ghost" onClick={clearRecording} className="h-7 w-7">
+              <Button size="icon" variant="ghost" onClick={clearAudio} className="h-7 w-7">
                 <Trash2 className="w-4 h-4 text-destructive" />
               </Button>
             </div>
@@ -277,44 +320,17 @@ export default function ChapterRecorder({
             
             <audio
               ref={audioRef}
-              src={recordedUrl}
+              src={audioUrl}
               className="hidden"
             />
           </div>
         )}
       </div>
 
-      {/* Text Content */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="chapterContent" className="text-sm font-medium">
-            Chapter Text Content
-          </Label>
-          <div className="flex items-center gap-1.5">
-            {transcribedText.trim() && (
-              meetsMinimum ? (
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-              ) : (
-                <AlertCircle className="w-3.5 h-3.5 text-destructive" />
-              )
-            )}
-            <span className={`text-xs ${meetsMinimum ? "text-muted-foreground" : "text-destructive"}`}>
-              {wordCount} / {MIN_WORD_COUNT} words
-            </span>
-          </div>
-        </div>
-        <Textarea
-          id="chapterContent"
-          placeholder="Enter or paste your chapter content here. This text will be used for the audiobook conversion..."
-          value={transcribedText}
-          onChange={(e) => setTranscribedText(e.target.value)}
-          className="min-h-[200px]"
-          disabled={isRecording}
-        />
-        <p className="text-xs text-muted-foreground">
-          The text content is required for audiobook conversion. The recording is optional and can be used for reference.
-        </p>
-      </div>
+      {/* Info Note */}
+      <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+        Audio chapters are saved directly as audio. No text-to-speech conversion needed.
+      </p>
 
       {/* Action Buttons */}
       <div className="flex gap-3 pt-2">
@@ -323,7 +339,7 @@ export default function ChapterRecorder({
         </Button>
         <Button 
           onClick={handleSaveChapter} 
-          disabled={isRecording || isTranscribing}
+          disabled={isRecording || !audioBlob}
           className="flex-1"
         >
           <Save className="w-4 h-4 mr-2" />

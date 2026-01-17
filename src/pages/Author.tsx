@@ -16,7 +16,6 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AudioPlayer from "@/components/AudioPlayer";
 import ChapterEditor, { Chapter, countWords, MINIMUM_WORD_COUNT } from "@/components/ChapterEditor";
-import VoiceRecorder from "@/components/VoiceRecorder";
 import ChapterRecorder from "@/components/ChapterRecorder";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,7 +36,7 @@ import {
   Plus,
   AlertCircle,
   Mic,
-  X,
+  Music,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -68,9 +67,16 @@ const LANGUAGE_OPTIONS = [
   { id: "English", name: "English", description: "English language" },
 ];
 
+// Extended Chapter type to support audio chapters
+interface AudioChapter extends Chapter {
+  isAudioChapter?: boolean;
+  audioBlob?: Blob;
+  audioUrl?: string;
+}
+
 const Author = () => {
   const { user } = useAuth();
-  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [chapters, setChapters] = useState<AudioChapter[]>([]);
   const [bookTitle, setBookTitle] = useState("");
   const [authorName, setAuthorName] = useState("");
   const [bookDescription, setBookDescription] = useState("");
@@ -87,36 +93,24 @@ const Author = () => {
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [customVoiceId, setCustomVoiceId] = useState<string | null>(null);
-  const [customVoiceName, setCustomVoiceName] = useState<string | null>(null);
-  const [useCustomVoice, setUseCustomVoice] = useState(false);
   const [showRecordModal, setShowRecordModal] = useState(false);
-  const [showVoiceCloningModal, setShowVoiceCloningModal] = useState(false);
-  const [recordingChapterTitle, setRecordingChapterTitle] = useState("");
-  const [recordingChapterContent, setRecordingChapterContent] = useState("");
+  const [showUploadAudioModal, setShowUploadAudioModal] = useState(false);
 
-  // Fetch user's custom voice from profile
-  useEffect(() => {
-    const fetchCustomVoice = async () => {
-      if (!user) return;
-      const { data } = await supabase
-        .from("profiles")
-        .select("custom_voice_id, custom_voice_name")
-        .eq("id", user.id)
-        .single();
-      
-      if (data?.custom_voice_id) {
-        setCustomVoiceId(data.custom_voice_id);
-        setCustomVoiceName(data.custom_voice_name);
-      }
+  // Handle adding audio chapter
+  const handleAddAudioChapter = (title: string, audioBlob: Blob) => {
+    const audioUrl = URL.createObjectURL(audioBlob);
+    const newChapter: AudioChapter = {
+      id: crypto.randomUUID(),
+      title,
+      content: "[Audio Chapter]",
+      wordCount: 0,
+      chapterNumber: chapters.length + 1,
+      isAudioChapter: true,
+      audioBlob,
+      audioUrl,
     };
-    fetchCustomVoice();
-  }, [user]);
-
-  const handleVoiceCloned = (voiceId: string, voiceName: string) => {
-    setCustomVoiceId(voiceId);
-    setCustomVoiceName(voiceName);
-    setUseCustomVoice(true);
+    setChapters(prev => [...prev, newChapter]);
+    setHasUnsavedChanges(true);
   };
 
   // Generate combined script from chapters
@@ -560,10 +554,6 @@ const Author = () => {
     setGeneratedAudio(null);
     
     try {
-      // Use custom voice if enabled, otherwise use selected preset voice
-      const voiceToUse = useCustomVoice && customVoiceId ? customVoiceId : selectedVoice;
-      const isCustomVoice = useCustomVoice && customVoiceId;
-
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/convert-to-audiobook`,
         {
@@ -574,9 +564,8 @@ const Author = () => {
           },
           body: JSON.stringify({ 
             text: combinedScriptText, 
-            voice: voiceToUse, 
+            voice: selectedVoice, 
             language: selectedLanguage,
-            isCustomVoice: isCustomVoice 
           }),
         }
       );
@@ -773,7 +762,7 @@ const Author = () => {
                       </div>
                       
                       {/* Three methods in a unified row */}
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-4 gap-3">
                         {/* Upload File Button */}
                         <label className="cursor-pointer">
                           <input
@@ -824,36 +813,20 @@ const Author = () => {
                             Voice chapter
                           </p>
                         </button>
-                      </div>
 
-                      {/* Voice Cloning Option for isiZulu */}
-                      {selectedLanguage === "isiZulu" && user && (
-                        <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <Mic className="w-4 h-4 text-primary" />
-                              <span className="text-sm font-medium">Voice Cloning</span>
-                            </div>
-                            {customVoiceId && (
-                              <Badge variant="secondary" className="text-xs">
-                                <CheckCircle2 className="w-3 h-3 mr-1" />
-                                {customVoiceName || "Custom Voice"}
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground mb-2">
-                            Clone your voice for better Zulu narration quality
+                        {/* Upload Audio Button */}
+                        <button
+                          type="button"
+                          onClick={() => setShowUploadAudioModal(true)}
+                          className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-primary hover:bg-muted/50 transition-all h-full flex flex-col items-center justify-center"
+                        >
+                          <Music className="w-6 h-6 text-muted-foreground mb-2" />
+                          <p className="font-medium text-xs mb-0.5">Audio</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            MP3, WAV
                           </p>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setShowVoiceCloningModal(true)}
-                            className="w-full"
-                          >
-                            {customVoiceId ? "Update Voice Clone" : "Clone Your Voice"}
-                          </Button>
-                        </div>
-                      )}
+                        </button>
+                      </div>
                     </div>
 
                     {/* Add chapter buttons */}
