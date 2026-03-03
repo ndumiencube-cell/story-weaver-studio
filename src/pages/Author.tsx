@@ -108,7 +108,7 @@ const Author = () => {
   const [showUploadAudioModal, setShowUploadAudioModal] = useState(false);
   const [audioSourceMethod, setAudioSourceMethod] = useState<'record' | 'upload' | null>(null);
   const [showCoverGenerator, setShowCoverGenerator] = useState(false);
-  const [selectedAudioMethod, setSelectedAudioMethod] = useState<'record' | 'upload' | ''>('');
+  const [selectedAudioMethod, setSelectedAudioMethod] = useState<string>('');
   const [activeTab, setActiveTab] = useState("create");
 
   // Handle language change - reset audio method selection
